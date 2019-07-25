@@ -1,0 +1,33 @@
+<idea-plugin>
+    <id>com.thief.idea</id>
+    <name>thief</name>
+    <vendor email="support@yourcompany.com" url="http://www.yourcompany.com"></vendor>
+
+    <description><![CDATA[
+    Enter short description for your plugin here.<br>
+    <em>most HTML tags may be used</em>
+    ]]></description>
+
+
+    <extensions defaultExtensionNs="com.intellij">
+
+        <!--canCloseContents 允许用户关闭-->
+        <toolWindow id="thief-book" anchor="bottom" canCloseContents="true"
+                    icon="/icons/thief.png" factoryClass="com.thief_book.idea.MainUi"/>
+
+        <projectConfigurable groupId="tools" displayName="Thief-Book Config" id="thief.id"
+                             instance="com.thief_book.idea.Setting"/>
+        <applicationService serviceInterface="com.thief_book.idea.PersistentState"
+                            serviceImplementation="com.thief_book.idea.PersistentState"/>
+    </extensions>
+
+    <actions>
+
+
+        <!-- Add your actions here -->
+        <!--<action id="test" class="com.thief_book.idea.test" text="thief" description="test">-->
+        <!--<add-to-group group-id="WindowMenu" anchor="last"/>-->
+        <!--</action>-->
+    </actions>
+
+</idea-plugin>
