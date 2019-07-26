@@ -1,10 +1,8 @@
 package com.thief_book.idea;
 
-import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
 import com.thief_book.idea.ui.SettingUi;
-import com.thief_book.idea.util.SettingUtil;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
