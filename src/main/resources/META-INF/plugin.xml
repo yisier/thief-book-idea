@@ -25,10 +25,10 @@
     <actions>
 
 
-        <!-- Add your actions here -->
-        <!--<action id="test" class="com.thief_book.idea.test" text="thief" description="test">-->
-        <!--<add-to-group group-id="WindowMenu" anchor="last"/>-->
-        <!--</action>-->
+         <!--Add your actions here -->
+        <action id="show-thief-book" class="com.thief_book.idea.ShowThiefBook" text="show thief" description="show thief">
+        <add-to-group group-id="WindowMenu" anchor="last"/>
+        </action>
     </actions>
 
 </idea-plugin>
