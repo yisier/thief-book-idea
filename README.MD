@@ -18,6 +18,16 @@
 
 ------------
 
+## 使用教程
+1)：到release中下载jar包;
+
+2)：打开IDEA,找到setting 中的plugin，点击Install Plugin from disk选择下载的jar包，安装并重启IDEA;
+
+3)：进入IDEA的Setting页面，找到Tools\Thief-Book Config选项，选择txt文件，设置好自动翻页秒数后，重启IDEA;
+
+4)：愉快的摸鱼吧！！！！
+
+
 ## 未截图演示的功能:
 1.阅读进度是实时保存的；
 
