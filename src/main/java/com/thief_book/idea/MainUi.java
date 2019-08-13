@@ -196,7 +196,7 @@ public class MainUi implements ToolWindowFactory, ActionListener, KeyListener {
         RandomAccessFile ra = null;
         String str = "";
         try {
-            ra = new RandomAccessFile(bookFile, "r");
+            ra = new BufferedRandomAccessFile(bookFile, "r");
             ra.seek(seek);
 
             str = new String(ra.readLine().getBytes("ISO-8859-1"), "gbk");
@@ -239,7 +239,7 @@ public class MainUi implements ToolWindowFactory, ActionListener, KeyListener {
         RandomAccessFile ra = null;
 
         try {
-            ra = new RandomAccessFile(bookFile, "r");
+            ra = new BufferedRandomAccessFile(bookFile, "r");
 
             String str = "";
             while ((str = ra.readLine()) != null) {
@@ -302,7 +302,7 @@ public class MainUi implements ToolWindowFactory, ActionListener, KeyListener {
 
         int line = 0;
         try {
-            ra = new RandomAccessFile(bookFile, "r");
+            ra = new BufferedRandomAccessFile(bookFile, "r");
 
             String str = "";
             while ((str = ra.readLine()) != null) {
