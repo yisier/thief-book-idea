@@ -11,7 +11,7 @@
 
 ------------
 
-![2](https://www.svipss.top/2.jpg "2")
+![2](https://s2.ax1x.com/2019/12/25/lFChCt.jpg "2")
 
 # 下载地址
 [链接](https://github.com/yisier/thief-book-idea/releases/download/V1.0.0/thief-book-idea-1.0.0.jar "链接")
