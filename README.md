@@ -7,7 +7,7 @@
 
 
 # 效果图
-![t](https://www.svipss.top/t.gif "t")
+![t](https://s2.ax1x.com/2019/12/25/lFC6De.gif "t")
 
 ------------
 
