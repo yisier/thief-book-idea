@@ -9,9 +9,7 @@ public class ShowThiefBook extends AnAction {
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-        // TODO: insert action logic here
-
-        if (e.getProject() != null) {
+         if (e.getProject() != null) {
             // 将项目对象，ToolWindow的id传入，获取控件对象
             ToolWindow toolWindow = ToolWindowManager.getInstance(e.getProject()).getToolWindow("thief-book");
             if (toolWindow != null) {

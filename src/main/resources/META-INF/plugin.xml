@@ -1,17 +1,16 @@
 <idea-plugin>
     <id>com.thief.idea</id>
     <name>thief-book-idea</name>
-    <vendor email="support@yourcompany.com" url="http://www.yourcompany.com"></vendor>
+    <vendor email="support@yourcompany.com" url="http://www.yourcompany.com">1.0.1</vendor>
 
     <description><![CDATA[
-    Enter short description for your plugin here.<br>
+    A Tool which is used to read books when working.<br>
     <em>most HTML tags may be used</em>
     ]]></description>
 
 	<idea-version since-build="162.0" until-build="193.*"/>
 
     <extensions defaultExtensionNs="com.intellij">
-
         <!--canCloseContents 允许用户关闭-->
         <toolWindow id="thief-book" anchor="bottom" canCloseContents="true"
                     icon="/icons/thief.png" factoryClass="com.thief_book.idea.MainUi"/>
@@ -23,9 +22,6 @@
     </extensions>
 
     <actions>
-
-
-         <!--Add your actions here -->
         <action id="show-thief-book" class="com.thief_book.idea.ShowThiefBook" text="show thief" description="show thief">
         <add-to-group group-id="WindowMenu" anchor="last"/>
         </action>
