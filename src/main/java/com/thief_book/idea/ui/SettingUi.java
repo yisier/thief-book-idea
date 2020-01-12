@@ -47,7 +47,9 @@ public class SettingUi {
                 fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
                 fileChooser.showOpenDialog(mainPanel);
                 File file = fileChooser.getSelectedFile();
-                bookPathText.setText( file.getPath());
+                if (bookPathText != null) {
+                    bookPathText.setText( file.getPath());
+                }
             }
         });
     }
