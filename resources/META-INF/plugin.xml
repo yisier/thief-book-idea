@@ -1,12 +1,26 @@
 <idea-plugin>
   <id>com.thief.idea</id>
   <name>thief-book-idea</name>
-  <version>1.0</version>
+  <version>0.1.2</version>
   <vendor email="1340976576@qq.con" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
 
-  <description></description>
+  <description>
+    上班摸鱼看出神器
+    设置界面在 File | Settings | Other Settings | Thief-Book Config
+    如果出现书本乱码的问题，可以创建一个空的 "utf-8" 编码的txt文件，然后将你的书本内容复制进来
+  </description>
 
-  <change-notes></change-notes>
+  <change-notes>
+    2020-09-04日更新记录
+    1.界面优化
+    2.功能优化
+    1) 更新setting设置后，如切换书本、修改字体等，不需要重启，点击主页面的刷新按钮即可生效;
+    2) 优化翻页速度;
+    3) 新增老板键，Ctrl + Shift + ↓，即可隐藏主页面;
+    4) 新增了每页行数、行间距设置;
+    5) 移除了自动翻页功能;
+    6) 新增的刷新按钮，在切换书本或更新了设置后，点击此按钮立即生效设置（以前的版本需要重启）。
+  </change-notes>
 
   <!-- please see https://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
   <idea-version since-build="162.0"/>
