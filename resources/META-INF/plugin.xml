@@ -1,0 +1,37 @@
+<idea-plugin>
+  <id>com.thief.idea</id>
+  <name>thief-book-idea</name>
+  <version>1.0</version>
+  <vendor email="1340976576@qq.con" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
+
+  <description></description>
+
+  <change-notes></change-notes>
+
+  <!-- please see https://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
+  <idea-version since-build="162.0"/>
+
+  <!-- please see https://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
+       on how to target different products -->
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij" >
+    <!--canCloseContents 允许用户关闭-->
+    <toolWindow id="thief-book" anchor="bottom" canCloseContents="false"
+                icon="/icons/thief.png" factoryClass="com.thief.idea.MainUi"/>
+
+    <projectConfigurable groupId="Other Settings" displayName="Thief-Book Config" id="thief.id"
+                         instance="com.thief.idea.Setting"/>
+    <applicationService
+            serviceImplementation="com.thief.idea.PersistentState"/>
+    <!-- Add your extensions here -->
+  </extensions>
+
+  <actions>
+    <!--Add your actions here -->
+    <action id="show-thief-book" class="com.thief.idea.ShowThiefBook" text="Show Thief" description="Show thief">
+      <add-to-group group-id="WindowMenu" anchor="last"/>
+    </action>
+  </actions>
+
+</idea-plugin>

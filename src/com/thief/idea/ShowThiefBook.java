@@ -1,4 +1,4 @@
-package com.thief_book.idea;
+package com.thief.idea;
 
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -9,7 +9,6 @@ public class ShowThiefBook extends AnAction {
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-        // TODO: insert action logic here
 
         if (e.getProject() != null) {
             // 将项目对象，ToolWindow的id传入，获取控件对象
@@ -22,7 +21,12 @@ public class ShowThiefBook extends AnAction {
 
                     }
                 });
+                if (toolWindow.getContentManager().getContentCount() < 1) {
+                    MainUi mainUi = new MainUi();
+                    mainUi.createToolWindowContent(e.getProject(), toolWindow);
+                }
             }
+
         }
 
 

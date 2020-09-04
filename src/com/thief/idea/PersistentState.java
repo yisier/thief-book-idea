@@ -1,4 +1,4 @@
-package com.thief_book.idea;
+package com.thief.idea;
 
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
@@ -24,7 +24,9 @@ public class PersistentState implements PersistentStateComponent<Element> {
 
     private String showFlag;
 
-    private String autoNextSecond;
+    private String fontSize;
+
+    private String fontType;
 
     private String before;
 
@@ -32,7 +34,13 @@ public class PersistentState implements PersistentStateComponent<Element> {
 
     private String currentLine;
 
-    private String autoKeymap;
+    private String lineCount;
+
+    private String lineSpace;
+
+//    private String bossKey;
+
+
 
     public PersistentState() {
     }
@@ -41,8 +49,11 @@ public class PersistentState implements PersistentStateComponent<Element> {
         if (persistentState == null) {
             persistentState = ServiceManager.getService(PersistentState.class);
         }
-
         return persistentState;
+    }
+
+    public static PersistentState getInstanceForce() {
+        return ServiceManager.getService(PersistentState.class);
     }
 
 
@@ -52,11 +63,15 @@ public class PersistentState implements PersistentStateComponent<Element> {
         Element element = new Element("PersistentState");
         element.setAttribute("bookPath", this.getBookPathText());
         element.setAttribute("showFlag", this.getShowFlag());
-        element.setAttribute("autoNextSecond", this.getAutoNextSecond());
+        element.setAttribute("fontSize", this.getFontSize());
         element.setAttribute("before", this.getBefore());
         element.setAttribute("next", this.getNext());
         element.setAttribute("currentLine", this.getCurrentLine());
-        element.setAttribute("autoKeymap", this.getAutoKeymap());
+        element.setAttribute("fontType", this.getFontType());
+        element.setAttribute("lineCount",this.getLineCount());
+        element.setAttribute("lineSpace",this.getLineSpace());
+//        element.setAttribute("bossKey",this.getBossKey());
+
         return element;
     }
 
@@ -64,11 +79,14 @@ public class PersistentState implements PersistentStateComponent<Element> {
     public void loadState(@NotNull Element state) {
         this.setBookPathText(state.getAttributeValue("bookPath"));
         this.setShowFlag(state.getAttributeValue("showFlag"));
-        this.setAutoNextSecond(state.getAttributeValue("autoNextSecond"));
+        this.setFontSize(state.getAttributeValue("fontSize"));
         this.setBefore(state.getAttributeValue("before"));
         this.setNext(state.getAttributeValue("next"));
         this.setCurrentLine(state.getAttributeValue("currentLine"));
-        this.setAutoKeymap(state.getAttributeValue("autoKeymap"));
+        this.setFontType(state.getAttributeValue("fontType"));
+        this.setLineCount(state.getAttributeValue("lineCount"));
+        this.setLineSpace(state.getAttributeValue("lineSpace"));
+//        this.setLineSpace(state.getAttributeValue("bossKey"));
 
     }
 
@@ -91,14 +109,6 @@ public class PersistentState implements PersistentStateComponent<Element> {
 
     public void setShowFlag(String showFlag) {
         this.showFlag = showFlag;
-    }
-
-    public String getAutoNextSecond() {
-        return StringUtils.isEmpty(autoNextSecond) ? "5" : this.autoNextSecond;
-    }
-
-    public void setAutoNextSecond(String autoNextSecond) {
-        this.autoNextSecond = autoNextSecond;
     }
 
     public String getBefore() {
@@ -125,11 +135,41 @@ public class PersistentState implements PersistentStateComponent<Element> {
         this.currentLine = currentLine;
     }
 
-    public String getAutoKeymap() {
-        return StringUtils.isEmpty(autoKeymap) ? "Alt + ↑" : this.autoKeymap;
+    public String getFontSize() {
+        return StringUtils.isEmpty(fontSize) ? "14" : this.fontSize;
     }
 
-    public void setAutoKeymap(String autoKeymap) {
-        this.autoKeymap = autoKeymap;
+    public void setFontSize(String fontSize) {
+        this.fontSize = fontSize;
     }
+
+    public String getFontType() {
+        return StringUtils.isEmpty(fontType) ? "Microsoft JhengHei" : this.fontType;
+    }
+
+    public void setFontType(String fontType) {
+        this.fontType = fontType;
+    }
+    public String getLineCount() {
+        return this.lineCount =StringUtils.isEmpty(lineCount) ? "1" : lineCount;
+    }
+    public void setLineCount(String lineCount) {
+        this.lineCount = lineCount;
+    }
+
+    public String getLineSpace() {
+        return this.lineSpace=StringUtils.isEmpty(lineSpace) ? "0" : lineSpace;
+    }
+
+    public void setLineSpace(String lineSpace) {
+        this.lineSpace = lineSpace;
+    }
+
+//    public String getBossKey() {
+//        return StringUtils.isEmpty(bossKey) ? "Ctrl + Shift + ↓" : this.bossKey;
+//    }
+//
+//    public void setBossKey(String bossKey) {
+//        this.bossKey = bossKey;
+//    }
 }

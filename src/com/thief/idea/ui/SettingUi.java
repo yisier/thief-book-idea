@@ -1,42 +1,38 @@
-package com.thief_book.idea.ui;
+package com.thief.idea.ui;
 
 import com.jgoodies.forms.layout.CellConstraints;
 import com.jgoodies.forms.layout.FormLayout;
-import com.thief_book.idea.PersistentState;
+import com.thief.idea.PersistentState;
+import com.thief.idea.util.SettingUtil;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 
 public class SettingUi {
 
-//
-//    public static void main(String[] args) {
-//        JFrame frame = new JFrame("SettingUi");
-//        frame.setContentPane(new SettingUi().mainPanel);
-//        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-//        frame.pack();
-//        frame.setVisible(true);
-//    }
-
 
     public JPanel mainPanel;
     public JLabel chooseFileLabel;
     public JLabel label1;
     public JButton button2;
-    public JCheckBox showFlag;
-    public JLabel label2;
     public JLabel Label3;
-    public JComboBox autoNextSecond;
-    public JLabel lable5;
-    public JLabel lable4;
+    public JComboBox fontSize;
+    public JComboBox fontType;
+    public JLabel label5;
+    public JLabel label4;
     public JTextField before;
     public JTextField next;
     public JTextField bookPathText;
     public JLabel l;
-    public JLabel autoKey;
-    public JTextField autoKeymap;
+    public JLabel fontSizeLabel;
+	public JLabel label6;
+    public JComboBox lineCount;
+    public JComboBox lineSpace;
+    public JLabel label7;
+    private JTextField bossKey;
 
 
     public SettingUi() {
@@ -47,31 +43,58 @@ public class SettingUi {
                 fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
                 fileChooser.showOpenDialog(mainPanel);
                 File file = fileChooser.getSelectedFile();
-                if (bookPathText != null) {
-                    bookPathText.setText( file.getPath());
-                }
+                bookPathText.setText( file.getPath());
             }
         });
+        final DefaultComboBoxModel defaultComboBoxModel1 = new DefaultComboBoxModel();
+
+        for (int i = 11; i < 25; i ++) {
+            defaultComboBoxModel1.addElement(i + "");
+        }
+
+        fontSize.setModel(defaultComboBoxModel1);
+        fontSize.setToolTipText("");
+        final DefaultComboBoxModel defaultComboBoxModel2 = new DefaultComboBoxModel();
+        for (String font : SettingUtil.getAllFontType()) {
+            defaultComboBoxModel2.addElement(font);
+        }
+        fontType.setModel(defaultComboBoxModel2);
+        fontType.setToolTipText("");
+
+        final DefaultComboBoxModel defaultComboBoxModel3 = new DefaultComboBoxModel();
+        for (int i = 1; i < 11; i ++) {
+            defaultComboBoxModel3.addElement(i + "");
+        }
+        lineCount.setModel(defaultComboBoxModel3);
+        lineCount.setToolTipText("");
+
+        final DefaultComboBoxModel defaultComboBoxModel4 = new DefaultComboBoxModel();
+        for (int i = 0; i < 3; i ++) {
+            defaultComboBoxModel4.addElement(i + "");
+        }
+        lineSpace.setModel(defaultComboBoxModel4);
+        lineSpace.setToolTipText("");
     }
 
 
+
     public void innit(PersistentState persistentState) {
-        if (autoNextSecond.getSelectedItem() == null) {
-            autoNextSecond.setSelectedItem("5");
+        if (fontSize.getSelectedItem() == null) {
+            fontSize.setSelectedItem(14);
         }
         bookPathText.setText(persistentState.getBookPathText());
-        showFlag.setSelected("1".equals(persistentState.getShowFlag()));
-        autoNextSecond.setSelectedItem(persistentState.getAutoNextSecond());
+        fontSize.setSelectedItem(persistentState.getFontSize());
+        fontType.setSelectedItem(persistentState.getFontType());
         before.setText(persistentState.getBefore());
         next.setText(persistentState.getNext());
-        autoKeymap.setText(persistentState.getAutoKeymap());
+        lineCount.setSelectedItem(persistentState.getLineCount());
+        lineSpace.setSelectedItem(persistentState.getLineSpace());
 
-
-        autoKeymap.setEditable(false);
         before.setEditable(false);
         next.setEditable(false);
         bookPathText.setEditable(false);
-
+        bossKey.setText("Ctrl + Shift + ↓");
+        bossKey.setEditable(false);
 
     }
 
@@ -103,33 +126,41 @@ public class SettingUi {
         button2 = new JButton();
         button2.setText("...");
         mainPanel.add(button2, cc.xy(5, 3, CellConstraints.CENTER, CellConstraints.CENTER));
-        label2 = new JLabel();
-        label2.setText("精简模式:");
-        mainPanel.add(label2, cc.xy(3, 5, CellConstraints.LEFT, CellConstraints.DEFAULT));
         Label3 = new JLabel();
         Label3.setText("自动翻页(秒):");
         mainPanel.add(Label3, cc.xy(3, 7));
-        autoNextSecond = new JComboBox();
+        fontSize = new JComboBox();
         final DefaultComboBoxModel defaultComboBoxModel1 = new DefaultComboBoxModel();
-        defaultComboBoxModel1.addElement("1");
-        defaultComboBoxModel1.addElement("2");
-        defaultComboBoxModel1.addElement("3");
-        defaultComboBoxModel1.addElement("4");
-        defaultComboBoxModel1.addElement("5");
-        defaultComboBoxModel1.addElement("6");
-        defaultComboBoxModel1.addElement("7");
-        defaultComboBoxModel1.addElement("8");
-        defaultComboBoxModel1.addElement("9");
-        defaultComboBoxModel1.addElement("10");
-        autoNextSecond.setModel(defaultComboBoxModel1);
-        autoNextSecond.setToolTipText("");
-        mainPanel.add(autoNextSecond, cc.xy(4, 7));
-        lable4 = new JLabel();
-        lable4.setText("上一页热键:");
-        mainPanel.add(lable4, cc.xy(3, 11));
-        lable5 = new JLabel();
-        lable5.setText("下一页热键:");
-        mainPanel.add(lable5, cc.xy(3, 13));
+        defaultComboBoxModel1.addElement("11");
+        defaultComboBoxModel1.addElement("12");
+        defaultComboBoxModel1.addElement("13");
+        defaultComboBoxModel1.addElement("14");
+        defaultComboBoxModel1.addElement("15");
+        defaultComboBoxModel1.addElement("16");
+        defaultComboBoxModel1.addElement("17");
+        defaultComboBoxModel1.addElement("18");
+        defaultComboBoxModel1.addElement("19");
+        defaultComboBoxModel1.addElement("20");
+        defaultComboBoxModel1.addElement("21");
+        defaultComboBoxModel1.addElement("22");
+        defaultComboBoxModel1.addElement("23");
+        defaultComboBoxModel1.addElement("24");
+        fontSize.setModel(defaultComboBoxModel1);
+        fontSize.setToolTipText("");
+        DefaultComboBoxModel defaultComboBoxModel2 = new DefaultComboBoxModel();
+        for (String font : SettingUtil.getAllFontType()) {
+            defaultComboBoxModel2.addElement(font);
+        }
+        fontType.setModel(defaultComboBoxModel2);
+        fontType.setToolTipText("");
+        mainPanel.add(fontSize, cc.xy(4, 7));
+        mainPanel.add(fontType, cc.xy(4, 9));
+        label4 = new JLabel();
+        label4.setText("上一页热键:");
+        mainPanel.add(label4, cc.xy(3, 11));
+        label5 = new JLabel();
+        label5.setText("下一页热键:");
+        mainPanel.add(label5, cc.xy(3, 13));
         before = new JTextField();
         before.setText("");
         mainPanel.add(before, cc.xy(4, 11, CellConstraints.FILL, CellConstraints.DEFAULT));
@@ -140,15 +171,6 @@ public class SettingUi {
         l = new JLabel();
         l.setText("");
         mainPanel.add(l, cc.xy(2, 3, CellConstraints.FILL, CellConstraints.DEFAULT));
-        showFlag = new JCheckBox();
-        showFlag.setText("");
-        mainPanel.add(showFlag, cc.xy(4, 5, CellConstraints.LEFT, CellConstraints.DEFAULT));
-        autoKey = new JLabel();
-        autoKey.setText("自动翻页热键:");
-        mainPanel.add(autoKey, cc.xy(3, 9));
-        autoKeymap = new JTextField();
-        autoKeymap.setText("");
-        mainPanel.add(autoKeymap, cc.xy(4, 9, CellConstraints.FILL, CellConstraints.DEFAULT));
     }
 
     /**
