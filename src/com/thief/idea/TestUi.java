@@ -11,10 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * @author <a href="mailto:yongpeng.zheng@vtradex.com">yongpeng.zheng</a>
- * @since 2020-09-04 15:57
- */
+
 public class TestUi implements ToolWindowFactory{
     @Override
     public boolean isApplicable(@NotNull Project project) {
