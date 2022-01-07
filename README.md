@@ -15,6 +15,8 @@
 (2) 主界面
 
 ![main](https://raw.githubusercontent.com/yisier/thief-book-idea/master/img/main.png "main")
+选择txt文本之后，点击PRVE前面的刷新按钮
+
 
 **2.功能优化**
 
