@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.thief.idea</id>
   <name>thief-book-idea</name>
-  <version>0.1.2</version>
+  <version>0.1.3</version>
   <vendor email="1340976576@qq.com" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
 
   <description>
@@ -39,6 +39,7 @@
   <change-notes>
     <![CDATA[
       <ul>
+        <li>修复未选择书本时保存设置导致 IDE 报错的问题</li>
         <li>翻页/跳页/刷新的文件读取改为后台线程执行，不再阻塞 UI</li>
         <li>替换已废弃 API（ServiceManager、ContentFactory.SERVICE）</li>
         <li>缓存系统字体列表，避免每次打开设置页重复枚举</li>

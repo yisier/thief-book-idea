@@ -89,7 +89,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
     }
 
     public String getBookPathText() {
-        return bookPathText;
+        return (bookPathText == null || bookPathText.isEmpty()) ? "" : this.bookPathText;
     }
 
     public void setBookPathText(String bookPathText) {
