@@ -1,0 +1,35 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.intellij' version '1.17.4'
+}
+
+group = 'com.thief'
+version = '0.1.2'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+intellij {
+    version = project.property('intellijVersion')
+    type = 'IC'
+    pluginName = 'thief-book-idea'
+    // 依赖 org.apache.commons.lang / com.jgoodies.forms 等由 IntelliJ Platform 自带的库，
+    // 无需额外声明依赖
+}
+
+patchPluginXml {
+    // 与 resources/META-INF/plugin.xml 中的 since-build 保持一致，
+    // 避免 gradle 插件把 since-build 覆盖成当前构建版本
+    sinceBuild = '233.0'
+    untilBuild = ''
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

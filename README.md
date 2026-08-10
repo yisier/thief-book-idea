@@ -3,6 +3,26 @@
 ### 之前看到有网友开发了一款PC端和VS Code插件版的小说阅读器（摸鱼神器Thief-Book），原创[链接地址](https://github.com/cteams/Thief-Book "链接地址")，但是很可惜的是没有IDEA版的，最近刚好比较闲，按照他的原型开发出了类似功能的IDEA插件。
 
 ------------
+# 2024-02-18 更新记录（V0.1.2）
+感谢 https://github.com/mine-riko/ 小哥的创意，本次更新内容：
+
+**1. 性能优化**
+
+1) 翻页/跳页/刷新的文件读取改为后台线程执行，不再阻塞 UI；
+
+2) 缓存系统字体列表，避免每次打开设置页重复枚举；
+
+3) 刷新时仅在切书或未统计时全量扫描行数，避免大文件重复扫描。
+
+**2. 兼容性与工程化**
+
+1) 替换已废弃 API（ServiceManager、ContentFactory.SERVICE），适配新版 IDEA；
+
+2) 改用 Gradle 构建（org.jetbrains.intellij），最低兼容 IntelliJ Platform 2023.3 (build 233)；
+
+3) 修复代码编码自动检测：支持 BOM / UTF-8 / GBK / ANSI，切书自动重新检测。
+
+------------
 # 2020-09-04日更新记录
 一年多没有更新，我胡汉三又回来了，哈哈哈，本次更新主要有一下几点内容，感谢 https://github.com/mine-riko/ 小哥的创意
 
@@ -45,13 +65,14 @@
 ![2](https://s2.ax1x.com/2019/12/25/lFChCt.jpg "2")
 
 # 下载地址
-[链接](https://github.com/yisier/thief-book-idea/releases/download/V0.1.1/thief-book-idea.jar "链接")
+[链接](https://github.com/yisier/thief-book-idea/releases/download/V0.1.2/thief-book-idea-0.1.2.zip "链接")
+最新版（V0.1.2）也已在 [JetBrains 插件市场](https://plugins.jetbrains.com/plugin/15442-thief-book-idea) 上架，可直接在 IDEA 的 Plugins 中搜索安装。
 
 
 ------------
 
 ## 使用教程
-1).到release中下载jar包;
+1).到release中下载zip包，或直接在 IDEA 的 Plugins 市场搜索 thief-book 安装;
 
 2).打开IDEA,找到setting 中的plugin，点击Install Plugin from disk选择下载的jar包，安装并重启IDEA;
 
@@ -68,6 +89,15 @@
 3).精简模式下会隐藏上下翻页按钮；
 
 4).当你不小心将窗口关闭时，可以在WIndow菜单下选择show thief重新打开;
+
+
+## 从源码构建（Gradle）
+项目使用 Gradle + IntelliJ Platform Gradle Plugin 构建（要求 JDK 17，版本见 `gradle.properties`）：
+
+```
+./gradlew buildPlugin   # 打包插件，产物在 build/distributions/thief-book-idea-<version>.zip
+./gradlew runIde        # 启动本地沙箱 IDEA 调试插件
+```
 
 
 ## 目前存在的问题：

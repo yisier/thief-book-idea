@@ -1,0 +1,11 @@
+# IntelliJ Platform SDK 构建输出
+out/
+build/
+
+# Gradle 缓存（注意 gradle/wrapper/ 下的 wrapper jar 必须提交，勿忽略）
+.gradle/
+
+# IntelliJ IDEA
+.idea/workspace.xml
+.idea/runConfigurations/
+*.iml

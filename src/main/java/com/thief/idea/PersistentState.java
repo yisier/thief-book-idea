@@ -1,10 +1,9 @@
 package com.thief.idea;
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.PersistentStateComponent;
-import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
-import org.apache.commons.lang.StringUtils;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,7 +17,10 @@ import org.jetbrains.annotations.Nullable;
 )
 public class PersistentState implements PersistentStateComponent<Element> {
 
-    private static PersistentState persistentState;
+    /**
+     * 阅读区字体为"系统默认"时跟随 IDE 默认字体（UIUtil.getLabelFont）
+     **/
+    public static final String DEFAULT_FONT = "系统默认";
 
     private String bookPathText;
 
@@ -38,22 +40,13 @@ public class PersistentState implements PersistentStateComponent<Element> {
 
     private String lineSpace;
 
-//    private String bossKey;
-
-
+    private String bossKey;
 
     public PersistentState() {
     }
 
     public static PersistentState getInstance() {
-        if (persistentState == null) {
-            persistentState = ServiceManager.getService(PersistentState.class);
-        }
-        return persistentState;
-    }
-
-    public static PersistentState getInstanceForce() {
-        return ServiceManager.getService(PersistentState.class);
+        return ApplicationManager.getApplication().getService(PersistentState.class);
     }
 
 
@@ -70,7 +63,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
         element.setAttribute("fontType", this.getFontType());
         element.setAttribute("lineCount",this.getLineCount());
         element.setAttribute("lineSpace",this.getLineSpace());
-//        element.setAttribute("bossKey",this.getBossKey());
+        element.setAttribute("bossKey",this.getBossKey());
 
         return element;
     }
@@ -86,7 +79,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
         this.setFontType(state.getAttributeValue("fontType"));
         this.setLineCount(state.getAttributeValue("lineCount"));
         this.setLineSpace(state.getAttributeValue("lineSpace"));
-//        this.setLineSpace(state.getAttributeValue("bossKey"));
+        this.setBossKey(state.getAttributeValue("bossKey"));
 
     }
 
@@ -104,7 +97,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
     }
 
     public String getShowFlag() {
-        return StringUtils.isEmpty(showFlag) ? "0" : this.showFlag;
+        return (showFlag == null || showFlag.isEmpty()) ? "0" : this.showFlag;
     }
 
     public void setShowFlag(String showFlag) {
@@ -112,7 +105,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
     }
 
     public String getBefore() {
-        return StringUtils.isEmpty(before) ? "Alt + ←" : this.before;
+        return (before == null || before.isEmpty()) ? "Ctrl+1" : this.before;
     }
 
     public void setBefore(String before) {
@@ -120,7 +113,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
     }
 
     public String getNext() {
-        return StringUtils.isEmpty(next) ? "Alt + →" : this.next;
+        return (next == null || next.isEmpty()) ? "Ctrl+2" : this.next;
     }
 
     public void setNext(String next) {
@@ -128,7 +121,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
     }
 
     public String getCurrentLine() {
-        return StringUtils.isEmpty(currentLine) ? "0" : this.currentLine;
+        return (currentLine == null || currentLine.isEmpty()) ? "0" : this.currentLine;
     }
 
     public void setCurrentLine(String currentLine) {
@@ -136,7 +129,7 @@ public class PersistentState implements PersistentStateComponent<Element> {
     }
 
     public String getFontSize() {
-        return StringUtils.isEmpty(fontSize) ? "14" : this.fontSize;
+        return (fontSize == null || fontSize.isEmpty()) ? "14" : this.fontSize;
     }
 
     public void setFontSize(String fontSize) {
@@ -144,32 +137,32 @@ public class PersistentState implements PersistentStateComponent<Element> {
     }
 
     public String getFontType() {
-        return StringUtils.isEmpty(fontType) ? "Microsoft JhengHei" : this.fontType;
+        return (fontType == null || fontType.isEmpty()) ? DEFAULT_FONT : this.fontType;
     }
 
     public void setFontType(String fontType) {
         this.fontType = fontType;
     }
     public String getLineCount() {
-        return this.lineCount =StringUtils.isEmpty(lineCount) ? "1" : lineCount;
+        return this.lineCount = (lineCount == null || lineCount.isEmpty()) ? "1" : lineCount;
     }
     public void setLineCount(String lineCount) {
         this.lineCount = lineCount;
     }
 
     public String getLineSpace() {
-        return this.lineSpace=StringUtils.isEmpty(lineSpace) ? "0" : lineSpace;
+        return this.lineSpace=(lineSpace == null || lineSpace.isEmpty()) ? "0" : lineSpace;
     }
 
     public void setLineSpace(String lineSpace) {
         this.lineSpace = lineSpace;
     }
 
-//    public String getBossKey() {
-//        return StringUtils.isEmpty(bossKey) ? "Ctrl + Shift + ↓" : this.bossKey;
-//    }
-//
-//    public void setBossKey(String bossKey) {
-//        this.bossKey = bossKey;
-//    }
+    public String getBossKey() {
+        return (bossKey == null || bossKey.isEmpty()) ? "Ctrl+3" : this.bossKey;
+    }
+
+    public void setBossKey(String bossKey) {
+        this.bossKey = bossKey;
+    }
 }

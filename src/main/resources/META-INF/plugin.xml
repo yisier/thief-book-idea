@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.thief.idea</id>
   <name>thief-book-idea</name>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <vendor email="1340976576@qq.com" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
 
   <description>
@@ -22,18 +22,26 @@
     <br/>
     Settings page : File | Settings | Other Settings | Thief-Book Config
     <br/>
-    Boss key : Ctrl + Shift + ↓
+    Boss key : Ctrl + 3 (configurable in settings)
     <br/>
-    You can choose font, number of lines, etc.
+    You can choose font, number of lines, hotkeys, etc.
      ]]>
   </description>
 
   <change-notes>
-   
+    <![CDATA[
+      <ul>
+        <li>翻页/跳页/刷新的文件读取改为后台线程执行，不再阻塞 UI</li>
+        <li>替换已废弃 API（ServiceManager、ContentFactory.SERVICE）</li>
+        <li>缓存系统字体列表，避免每次打开设置页重复枚举</li>
+        <li>刷新时仅在切书或未统计时全量扫描行数，避免大文件重复扫描</li>
+        <li>改用 Gradle 构建（org.jetbrains.intellij），最低兼容 IntelliJ Platform 2023.3 (build 233)</li>
+      </ul>
+    ]]>
   </change-notes>
 
   <!-- please see https://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
-  <idea-version since-build="162.0"/>
+  <idea-version since-build="233.0"/>
 
   <!-- please see https://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
        on how to target different products -->

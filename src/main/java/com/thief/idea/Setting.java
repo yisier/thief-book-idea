@@ -1,14 +1,15 @@
 package com.thief.idea;
 
+import com.intellij.ide.SaveAndSyncHandler;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
 import com.thief.idea.ui.SettingUi;
-import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.Objects;
 
 public class Setting implements SearchableConfigurable {
 
@@ -65,13 +66,14 @@ public class Setting implements SearchableConfigurable {
 
     @Override
     public boolean isModified() {
-        return !StringUtils.equals(persistentState.getBookPathText(), settingUi.bookPathText.getText())
-                || !StringUtils.equals(persistentState.getFontSize(), settingUi.fontSize.getSelectedItem().toString())
-                || !StringUtils.equals(persistentState.getBefore(), settingUi.before.getText())
-                || !StringUtils.equals(persistentState.getNext(), settingUi.next.getText())
-                || !StringUtils.equals(persistentState.getLineCount(), settingUi.lineCount.getSelectedItem().toString())
-                || !StringUtils.equals(persistentState.getLineSpace(), settingUi.lineSpace.getSelectedItem().toString())
-                || !StringUtils.equals(persistentState.getFontType(), settingUi.fontType.getSelectedItem().toString());
+        return !Objects.equals(persistentState.getBookPathText(), settingUi.bookPathText.getText())
+                || !Objects.equals(persistentState.getFontSize(), settingUi.fontSize.getSelectedItem().toString())
+                || !Objects.equals(persistentState.getBefore(), settingUi.before.getText())
+                || !Objects.equals(persistentState.getNext(), settingUi.next.getText())
+                || !Objects.equals(persistentState.getLineCount(), settingUi.lineCount.getSelectedItem().toString())
+                || !Objects.equals(persistentState.getLineSpace(), settingUi.lineSpace.getSelectedItem().toString())
+                || !Objects.equals(persistentState.getFontType(), settingUi.fontType.getSelectedItem().toString())
+                || !Objects.equals(persistentState.getBossKey(), settingUi.bossKey.getText());
 
     }
 
@@ -84,7 +86,17 @@ public class Setting implements SearchableConfigurable {
         persistentState.setLineCount(settingUi.lineCount.getSelectedItem().toString());
         persistentState.setFontType(settingUi.fontType.getSelectedItem().toString());
         persistentState.setLineSpace(settingUi.lineSpace.getSelectedItem().toString());
+        persistentState.setBossKey(settingUi.bossKey.getText());
 
+        // 让已打开的工具窗口立即应用新设置，无需再手动点刷新
+        MainUi mainUi = MainUi.getInstance(project);
+        if (mainUi != null) {
+            mainUi.refresh();
+        }
+
+        // 点击 Apply 时同样立即把应用级设置落盘（thief-book.xml），与点击 OK 行为一致；
+        // 否则平台只在 OK 时强制保存，Apply 只改内存，IDE 异常退出后设置会丢失
+        SaveAndSyncHandler.getInstance().scheduleSave(new SaveAndSyncHandler.SaveTask(null, true));
     }
 
     @Override

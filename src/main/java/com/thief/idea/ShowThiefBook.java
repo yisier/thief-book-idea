@@ -15,12 +15,7 @@ public class ShowThiefBook extends AnAction {
             ToolWindow toolWindow = ToolWindowManager.getInstance(e.getProject()).getToolWindow("thief-book");
             if (toolWindow != null) {
                 // 无论当前状态为关闭/打开，进行强制打开ToolWindow
-                toolWindow.show(new Runnable() {
-                    @Override
-                    public void run() {
-
-                    }
-                });
+                toolWindow.show(() -> {});
                 if (toolWindow.getContentManager().getContentCount() < 1) {
                     MainUi mainUi = new MainUi();
                     mainUi.createToolWindowContent(e.getProject(), toolWindow);
