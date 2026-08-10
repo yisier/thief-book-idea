@@ -6,25 +6,33 @@
 
   <description>
       <![CDATA[
-    <p><b>This is a plug-in that can be read in the IDE. </b></p>
+    <p><b>Read novels in the IDE, just like the Thief-Book!</b></p>
+    <p><b>一款在 IDE 里摸鱼看小说的插件（Thief-Book 的 IDEA 版）。</b></p>
+    <br/>
+    <p>
+    <b>How to use? / 使用方式：</b>
+    <br/>
+    1. Open Settings: File | Settings | Other Settings | Thief-Book Config, choose your txt book file / 打开设置页选择一本 txt 小说
+    <br/>
+    2. Open the "thief-book" tool window at the bottom, click the refresh button / 打开底部 thief-book 窗口，点击刷新按钮加载
+    <br/>
+    3. Enjoy reading! / 开始摸鱼！
     <br/>
     <p>
     <b>
-    How to use?
-    <br/>
-    1.Choose your book on the settings page
-    <br/>
-    2.Click the refresh button in the thief panel
-    <br/>
-    <p>
-    <b>
     <br/>
     <br/>
-    Settings page : File | Settings | Other Settings | Thief-Book Config
+    Settings page / 设置页 : File | Settings | Other Settings | Thief-Book Config
     <br/>
-    Boss key : Ctrl + 3 (configurable in settings)
+    Previous page / 上一页 : Ctrl + 1 (configurable in settings)
     <br/>
-    You can choose font, number of lines, hotkeys, etc.
+    Next page / 下一页 : Ctrl + 2 (configurable in settings)
+    <br/>
+    Boss key / 老板键 : Ctrl + 3 (configurable in settings, hides the window as "Terminal")
+    <br/>
+    You can choose font, font size, lines per page, line spacing, hotkeys, etc. / 可自定义字体、字号、每页行数、行间距与热键
+    <br/>
+    Reading progress is saved automatically. / 阅读进度实时保存，下次自动续读
      ]]>
   </description>
 
