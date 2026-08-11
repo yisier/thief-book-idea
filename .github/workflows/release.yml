@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      # 放在 job 级别：buildPlugin 首次启动 Gradle daemon 时就带上 token，
+      # 后续 publishPlugin 复用同一 daemon 才能通过 System.getenv 取到。
+      JETBRAINS_PLUGIN_TOKEN: ${{ secrets.JETBRAINS_PLUGIN_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +33,14 @@ jobs:
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Check token secret is set
+        run: |
+          if [ -z "$JETBRAINS_PLUGIN_TOKEN" ]; then
+            echo "::error::Secret JETBRAINS_PLUGIN_TOKEN 为空或未配置"
+            exit 1
+          fi
+          echo "token length: ${#JETBRAINS_PLUGIN_TOKEN}"
+
       - name: Build plugin
         run: ./gradlew buildPlugin -PpluginVersion=${{ steps.ver.outputs.version }}
 
@@ -42,6 +54,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to JetBrains Marketplace
-        env:
-          JETBRAINS_PLUGIN_TOKEN: ${{ secrets.JETBRAINS_PLUGIN_TOKEN }}
         run: ./gradlew publishPlugin -PpluginVersion=${{ steps.ver.outputs.version }}
