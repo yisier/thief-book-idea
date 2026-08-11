@@ -8,6 +8,12 @@ import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
 
 @State(
         name = "PersistentState",
@@ -42,6 +48,12 @@ public class PersistentState implements PersistentStateComponent<Element> {
 
     private String bossKey;
 
+    /**
+     * 全部书本：路径 -> 各自阅读进度（行号），顺序即设置页列表顺序。
+     * 支持选择多本书并在阅读界面切换，每本书独立保存进度。
+     **/
+    private LinkedHashMap<String, String> bookMap = new LinkedHashMap<>();
+
     public PersistentState() {
     }
 
@@ -64,12 +76,19 @@ public class PersistentState implements PersistentStateComponent<Element> {
         element.setAttribute("lineCount",this.getLineCount());
         element.setAttribute("lineSpace",this.getLineSpace());
         element.setAttribute("bossKey",this.getBossKey());
+        for (Map.Entry<String, String> entry : bookMap.entrySet()) {
+            Element book = new Element("book");
+            book.setAttribute("path", entry.getKey());
+            book.setAttribute("line", entry.getValue());
+            element.addContent(book);
+        }
 
         return element;
     }
 
     @Override
     public void loadState(@NotNull Element state) {
+        bookMap.clear();
         this.setBookPathText(state.getAttributeValue("bookPath"));
         this.setShowFlag(state.getAttributeValue("showFlag"));
         this.setFontSize(state.getAttributeValue("fontSize"));
@@ -80,6 +99,18 @@ public class PersistentState implements PersistentStateComponent<Element> {
         this.setLineCount(state.getAttributeValue("lineCount"));
         this.setLineSpace(state.getAttributeValue("lineSpace"));
         this.setBossKey(state.getAttributeValue("bossKey"));
+        for (Element book : state.getChildren("book")) {
+            String path = book.getAttributeValue("path");
+            if (path == null || path.isEmpty()) {
+                continue;
+            }
+            bookMap.put(path, book.getAttributeValue("line"));
+        }
+        // 兼容旧版配置：只有 bookPath 属性、没有 book 子元素时，导入为第一本书
+        String legacy = this.getBookPathText();
+        if (!legacy.isEmpty() && !bookMap.containsKey(legacy)) {
+            bookMap.put(legacy, this.currentLine);
+        }
 
     }
 
@@ -94,6 +125,62 @@ public class PersistentState implements PersistentStateComponent<Element> {
 
     public void setBookPathText(String bookPathText) {
         this.bookPathText = bookPathText;
+        if (bookPathText != null && !bookPathText.isEmpty() && !bookMap.containsKey(bookPathText)) {
+            bookMap.put(bookPathText, this.currentLine != null ? this.currentLine : "0");
+        }
+    }
+
+    /**
+     * 全部书本路径（按添加顺序）
+     **/
+    public List<String> getBookPathList() {
+        return new ArrayList<>(bookMap.keySet());
+    }
+
+    /**
+     * 设置全部书本：保留已存在的进度，活动书被移除时自动切到列表第一本
+     **/
+    public void setBookPathList(List<String> paths) {
+        LinkedHashMap<String, String> newMap = new LinkedHashMap<>();
+        for (String path : paths) {
+            if (path == null || path.isEmpty()) {
+                continue;
+            }
+            String progress = bookMap.get(path);
+            newMap.put(path, progress != null ? progress : "0");
+        }
+        bookMap = newMap;
+        if (!bookMap.containsKey(getBookPathText())) {
+            String first = bookMap.isEmpty() ? "" : bookMap.keySet().iterator().next();
+            setBookPathText(first);
+        }
+    }
+
+    /**
+     * 获取某本书的阅读进度（行号）；活动书回退到历史 currentLine，未读过的书返回 0
+     **/
+    public String getCurrentLineFor(String bookPath) {
+        String line = bookMap.get(bookPath);
+        if (line != null) {
+            return line;
+        }
+        if (Objects.equals(bookPath, getBookPathText())) {
+            return getCurrentLine();
+        }
+        return "0";
+    }
+
+    /**
+     * 保存某本书的阅读进度（行号）；活动书同步更新历史 currentLine 属性
+     **/
+    public void setCurrentLineFor(String bookPath, String line) {
+        if (bookPath == null || bookPath.isEmpty()) {
+            return;
+        }
+        bookMap.put(bookPath, line);
+        if (Objects.equals(bookPath, getBookPathText())) {
+            this.currentLine = line;
+        }
     }
 
     public String getShowFlag() {

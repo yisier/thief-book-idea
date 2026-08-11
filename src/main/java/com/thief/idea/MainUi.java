@@ -101,9 +101,14 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     private Integer lineSpace = parseIntSafe(persistentState.getLineSpace(), 0);
 
     /**
-     * 正文内容显示
+     * 阅读区显示
      **/
     private JTextArea textArea;
+
+    /**
+     * 书本切换下拉框：设置页选择了多本书时显示，切换即换书并恢复该书进度
+     **/
+    private JComboBox<String> bookSelector;
 
     /**
      * 解析阅读区字体：未配置/选择"系统默认"/系统不存在的字体时，跟随 IDE 默认字体
@@ -265,9 +270,65 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         JPanel panel = new JPanel();
         panel.setLayout(new BorderLayout());
         textArea = initTextArea();
+        panel.add(initBookBar(), BorderLayout.NORTH);
         panel.add(textArea, BorderLayout.CENTER);
         panel.add(initOperationPanel(), BorderLayout.EAST);
         return panel;
+    }
+
+    /**
+     * 顶部书本切换栏：只有设置页配置了多本书时才可见
+     **/
+    private JPanel initBookBar() {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        bookSelector = initBookSelector();
+        bar.add(bookSelector);
+        return bar;
+    }
+
+    /**
+     * 书本切换下拉框：显示文件名，悬停显示完整路径；
+     * 切换后把该书设为活动书并刷新（进度按书独立保存，自动恢复）
+     **/
+    private JComboBox<String> initBookSelector() {
+        JComboBox<String> combo = new JComboBox<>();
+        combo.setPreferredSize(new Dimension(240, 26));
+        combo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value != null) {
+                    String path = value.toString();
+                    label.setText(new File(path).getName());
+                    label.setToolTipText(path);
+                }
+                return label;
+            }
+        });
+        combo.addActionListener(e -> {
+            Object selected = combo.getSelectedItem();
+            if (selected != null && !Objects.equals(selected, bookFile)) {
+                persistentState.setBookPathText(selected.toString());
+                refresh();
+            }
+        });
+        return combo;
+    }
+
+    /**
+     * 同步书本下拉框与设置页的书本列表，仅多本书时显示
+     **/
+    private void updateBookSelector() {
+        if (bookSelector == null) {
+            return;
+        }
+        String selected = bookFile;
+        bookSelector.removeAllItems();
+        for (String path : persistentState.getBookPathList()) {
+            bookSelector.addItem(path);
+        }
+        bookSelector.setSelectedItem(selected);
+        bookSelector.setVisible(persistentState.getBookPathList().size() > 1);
     }
 
     /**
@@ -421,21 +482,21 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                     || !Objects.equals(bookFile, bookPath);
             if (bookChanged) {
                 bookFile = bookPath;
-                currentPage = 0;
+                // 切书后从该书独立保存的进度恢复
+                currentPage = parseIntSafe(persistentState.getCurrentLineFor(bookFile), 0);
                 seek = 0;
                 seekDictionary.clear();
                 fileCharset = null;
             } else {
-                // 初始化当前行数
-                if (persistentState.getCurrentLine() != null && !persistentState.getCurrentLine().isEmpty()) {
-                    currentPage = parseIntSafe(persistentState.getCurrentLine(), currentPage);
-                }
+                // 初始化当前行数（按书独立保存）
+                currentPage = parseIntSafe(persistentState.getCurrentLineFor(bookFile), currentPage);
             }
             type = persistentState.getFontType();
             size = persistentState.getFontSize();
             lineCount = parseIntSafe(persistentState.getLineCount(), lineCount);
             lineSpace = parseIntSafe(persistentState.getLineSpace(), lineSpace);
             updateHotkeys();
+            updateBookSelector();
 
             if (bookFile == null || bookFile.isEmpty()) {
                 totalLine = 0;
@@ -554,6 +615,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             }
             current.setVisible(true);
             total.setVisible(true);
+            if (bookSelector != null) {
+                bookSelector.setVisible(persistentState.getBookPathList().size() > 1);
+            }
             textArea.setText(temp);
             textArea.setFont(resolveFont());
             if (content != null) {
@@ -569,6 +633,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             }
             current.setVisible(false);
             total.setVisible(false);
+            if (bookSelector != null) {
+                bookSelector.setVisible(false);
+            }
             temp = textArea.getText();
             textArea.setText(BOSS_FAKE_TEXT);
             textArea.setFont(UIUtil.getFontWithFallback(new Font(Font.MONOSPACED, Font.PLAIN, 12)));
@@ -869,10 +936,10 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     }
 
     /**
-     * 在 EDT 上保存当前阅读进度
+     * 在 EDT 上保存当前阅读进度（按书独立保存）
      **/
     private void saveProgress() {
-        persistentState.setCurrentLine(String.valueOf(currentPage));
+        persistentState.setCurrentLineFor(bookFile, String.valueOf(currentPage));
     }
 
     private void updatePageInfo() {
