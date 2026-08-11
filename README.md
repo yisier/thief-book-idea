@@ -1,8 +1,18 @@
-![b](https://s2.ax1x.com/2019/12/25/lFCd41.jpg "b")
+<img src="src/main/resources/static/slogan.jpg" alt="b"/>
 
 # thief-book-idea
 
 一款 IntelliJ IDEA 插件，让你在 IDE 里悄悄看小说——"摸鱼神器" Thief-Book 的 IDEA 版。灵感来自 [Thief-Book](https://github.com/cteams/Thief-Book)（PC 端 / VS Code 版）。
+
+## 效果图
+
+### 设置页
+
+<img src="src/main/resources/static/setting.png" alt="setting" width="400" />
+
+### 阅读窗口
+
+<img src="src/main/resources/static/main.png" alt="main" width="800" />
 
 ## 功能特性
 
