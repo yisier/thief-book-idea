@@ -9,4 +9,3 @@ build/
 .idea/workspace.xml
 .idea/runConfigurations/
 *.iml
-/gradle/

@@ -10,6 +10,7 @@ import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
+import com.thief.idea.util.EpubUtil;
 import com.thief.idea.util.HotkeyUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -18,6 +19,8 @@ import java.awt.*;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -29,6 +32,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -81,6 +85,31 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     private Charset fileCharset;
 
     /**
+     * epub 书籍解包出的临时文本文件（UTF-8），非 epub 书籍恒为 null
+     **/
+    private File epubTextFile;
+
+    /**
+     * epub 源文件解包时的最后修改时间，源文件变化时自动重新解包
+     **/
+    private long epubLastModified;
+
+    /**
+     * 当前 epub 的目录（含正文行号），非 epub 书籍为 null
+     **/
+    private List<EpubUtil.TocEntry> epubToc;
+
+    /**
+     * epub 目录面板（左侧），仅在 epub 且有目录时显示
+     **/
+    private JPanel tocPanel;
+
+    /**
+     * 目录列表
+     **/
+    private JList<EpubUtil.TocEntry> tocList;
+
+    /**
      * 读取字体设置
      **/
     private String type = persistentState.getFontType();
@@ -129,11 +158,6 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      * 当前阅读页&跳页输入框
      **/
     private JTextField current;
-
-    /**
-     * 刷新按钮
-     **/
-    private JButton freshButton;
 
     /**
      * 上一页按钮
@@ -272,6 +296,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         textArea = initTextArea();
         panel.add(initBookBar(), BorderLayout.NORTH);
         panel.add(textArea, BorderLayout.CENTER);
+        panel.add(initTocPanel(), BorderLayout.WEST);
         panel.add(initOperationPanel(), BorderLayout.EAST);
         return panel;
     }
@@ -349,6 +374,118 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     }
 
     /**
+     * 左侧目录面板：仅 epub 且有目录时可见，点击目录项跳转到对应章节
+     **/
+    private JPanel initTocPanel() {
+        tocPanel = new JPanel(new BorderLayout());
+        JLabel title = new JLabel("目录");
+        title.setBorder(JBUI.Borders.empty(4, 8));
+        tocList = new JList<>();
+        tocList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        tocList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof EpubUtil.TocEntry) {
+                    EpubUtil.TocEntry entry = (EpubUtil.TocEntry) value;
+                    label.setText("  ".repeat(entry.depth) + entry.title);
+                    label.setToolTipText(entry.href);
+                }
+                return label;
+            }
+        });
+        tocList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    jumpToToc(tocList.getSelectedIndex());
+                }
+            }
+        });
+        tocList.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    jumpToToc(tocList.getSelectedIndex());
+                }
+            }
+        });
+        JScrollPane scroll = new JScrollPane(tocList);
+        tocPanel.add(title, BorderLayout.NORTH);
+        tocPanel.add(scroll, BorderLayout.CENTER);
+        tocPanel.setPreferredSize(new Dimension(220, 0));
+        tocPanel.setVisible(false);
+        return tocPanel;
+    }
+
+    /**
+     * 按当前 epub 目录刷新左侧目录面板；非 epub 或无目录时隐藏
+     **/
+    private void updateTocPanel() {
+        if (tocPanel == null || tocList == null) {
+            return;
+        }
+        if (epubToc == null || epubToc.isEmpty()) {
+            tocPanel.setVisible(false);
+            return;
+        }
+        DefaultListModel<EpubUtil.TocEntry> model = new DefaultListModel<>();
+        for (EpubUtil.TocEntry entry : epubToc) {
+            model.addElement(entry);
+        }
+        tocList.setModel(model);
+        tocPanel.setVisible(true);
+    }
+
+    /**
+     * 点击目录项：跳转到对应章节（该章起始行作为本页第一行）
+     **/
+    private void jumpToToc(int index) {
+        if (index < 0 || epubToc == null || index >= epubToc.size()) {
+            return;
+        }
+        final int line = epubToc.get(index).line;
+        runIoAsync(() -> {
+            currentPage = line;
+            countSeek();
+            return readBook();
+        }, content -> {
+            textArea.setText(content);
+            saveProgress();
+            current.setText(" " + currentPage / lineCount);
+            updatePageInfo();
+            syncTocSelection();
+        });
+    }
+
+    /**
+     * 翻页/跳页/重载后，按当前页所在章节同步左侧目录高亮。
+     * anchor 取当前页最后一行（currentPage - 1，clamp 到 0），保证落在当前显示页内，
+     * 对最后一页不足 lineCount 行的情况同样正确。
+     **/
+    private void syncTocSelection() {
+        if (tocList == null || epubToc == null || epubToc.isEmpty()) {
+            return;
+        }
+        int anchor = Math.max(0, currentPage - 1);
+        int best = -1;
+        int bestLine = -1;
+        for (int i = 0; i < epubToc.size(); i++) {
+            int l = epubToc.get(i).line;
+            if (l >= 0 && l <= anchor && l >= bestLine) {
+                best = i;
+                bestLine = l;
+            }
+        }
+        if (best >= 0) {
+            if (tocList.getSelectedIndex() != best) {
+                tocList.setSelectedIndex(best);
+            }
+            tocList.ensureIndexIsVisible(best);
+        }
+    }
+
+    /**
      * 初始化操作面板
      **/
     private JPanel initOperationPanel() {
@@ -362,9 +499,6 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         panelRight.setPreferredSize(new Dimension(280, 30));
         panelRight.add(current, BorderLayout.EAST);
         panelRight.add(total, BorderLayout.EAST);
-        //加载按钮
-        freshButton = initFreshButton();
-        panelRight.add(freshButton, BorderLayout.EAST);
         //上一页
         upButton = initUpButton();
         panelRight.add(upButton, BorderLayout.EAST);
@@ -380,7 +514,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
 
     /**
      * 从设置读取热键并绑定：上一页/下一页仅工具窗口内生效，老板键全局生效。
-     * 刷新按钮会重新调用本方法，使设置页修改的热键即时生效。
+     * refresh() 会重新调用本方法，使设置页修改的热键即时生效。
      **/
     private void updateHotkeys() {
         KeyStroke oldPrev = prevKeyStroke;
@@ -444,6 +578,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                             textArea.setText(content);
                             saveProgress();
                             current.setText(" " + currentPage / lineCount);
+                            syncTocSelection();
                         });
                     } catch (NumberFormatException e2) {
                         textArea.setText("请输入数字");
@@ -456,20 +591,8 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     }
 
     /**
-     * 刷新按钮🔄
-     **/
-    private JButton initFreshButton() {
-        JButton refresh = new JButton("\uD83D\uDD04");
-        refresh.setPreferredSize(new Dimension(20, 20));
-        refresh.setContentAreaFilled(false);
-        refresh.setBorderPainted(false);
-        refresh.addActionListener(e -> refresh());
-        return refresh;
-    }
-
-    /**
      * 重新读取设置并应用到阅读界面。
-     * 刷新按钮与设置页 apply() 共用，设置修改后无需手动点刷新即可生效。
+     * 打开窗口、切书与设置页 apply() 均调用本方法，设置修改后无需手动刷新即可生效。
      **/
     public void refresh() {
         if (textArea == null) {
@@ -487,6 +610,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 seek = 0;
                 seekDictionary.clear();
                 fileCharset = null;
+                epubTextFile = null;
+                epubLastModified = 0;
+                epubToc = null;
             } else {
                 // 初始化当前行数（按书独立保存）
                 currentPage = parseIntSafe(persistentState.getCurrentLineFor(bookFile), currentPage);
@@ -502,12 +628,15 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 totalLine = 0;
                 textArea.setText(temp);
                 updatePageInfo();
+                updateTocPanel();
                 textArea.setFont(resolveFont());
                 return;
             }
             // 仅在切书或尚未统计过时才全量扫描行数，避免每次刷新都重扫大文件
             final boolean needCount = bookChanged || totalLine == 0;
             if (!runIoAsync(() -> {
+                // 切书时先把 epub 解包成文本（首次解包可能耗时），失败直接抛给用户看
+                resolveReadPath();
                 if (needCount) {
                     totalLine = countLine();
                 }
@@ -526,6 +655,8 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             }, content -> {
                 textArea.setText(content);
                 updatePageInfo();
+                updateTocPanel();
+                syncTocSelection();
                 textArea.setFont(resolveFont());
             })) {
                 // 正在翻页/读取中：标记稍后自动重试，确保设置修改必然生效
@@ -566,6 +697,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 textArea.setText(content);
                 saveProgress();
                 current.setText(" " + currentPage / lineCount);
+                syncTocSelection();
             });
         });
 
@@ -594,6 +726,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 textArea.setText(content);
                 saveProgress();
                 current.setText(" " + (currentPage % lineCount == 0 ? currentPage / lineCount : currentPage / lineCount + 1));
+                syncTocSelection();
             });
 
         });
@@ -608,7 +741,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      * 任何窗口（包括设置页）获得焦点时都生效。
      **/
     public void toggleBoss() {
-        JButton[] buttons = {freshButton, upButton, downButton, bossButton};
+        JButton[] buttons = {upButton, downButton, bossButton};
         if (hide) {
             for (JButton b : buttons) {
                 b.setVisible(true);
@@ -617,6 +750,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             total.setVisible(true);
             if (bookSelector != null) {
                 bookSelector.setVisible(persistentState.getBookPathList().size() > 1);
+            }
+            if (tocPanel != null) {
+                tocPanel.setVisible(epubToc != null && !epubToc.isEmpty());
             }
             textArea.setText(temp);
             textArea.setFont(resolveFont());
@@ -635,6 +771,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             total.setVisible(false);
             if (bookSelector != null) {
                 bookSelector.setVisible(false);
+            }
+            if (tocPanel != null) {
+                tocPanel.setVisible(false);
             }
             temp = textArea.getText();
             textArea.setText(BOSS_FAKE_TEXT);
@@ -673,7 +812,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         StringBuilder str = new StringBuilder();
         try {
             ensureCharset();
-            ra = new RandomAccessFile(bookFile, "r");
+            ra = new RandomAccessFile(resolveReadPath(), "r");
             ra.seek(seek);
             StringBuilder nStr = new StringBuilder();
             for (int j = 0; j < lineSpace + 1; j++) {
@@ -705,7 +844,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      * 按字节块扫描换行符计数，避免逐行 readLine 的开销
      **/
     private int countLine() throws IOException {
-        try (RandomAccessFile ra = new RandomAccessFile(bookFile, "r")) {
+        try (RandomAccessFile ra = new RandomAccessFile(resolveReadPath(), "r")) {
             int i = 0;
             seekDictionary.put(0, ra.getFilePointer());
             byte[] buf = new byte[8192];
@@ -747,7 +886,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             if (seekDictionary.containsKey(currentPage)) {
                 this.seek = seekDictionary.get(currentPage);
             } else {
-                ra = new RandomAccessFile(bookFile, "r");
+                ra = new RandomAccessFile(resolveReadPath(), "r");
                 int line = 0;
                 for (int i = 0; cacheInterval * i < currentPage; i++) {
                     line = cacheInterval * i;
@@ -784,8 +923,34 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             if (bookFile == null || bookFile.isEmpty()) {
                 throw new IOException("未设置书本文件路径");
             }
-            fileCharset = detectCharset(new File(bookFile));
+            fileCharset = detectCharset(new File(resolveReadPath()));
         }
+    }
+
+    /**
+     * 返回实际读取的文件路径：epub 先解包成 UTF-8 临时文本再读（源文件变化时自动重新解包），
+     * 其余格式直接读原文件。解包失败（如损坏的 epub）时抛出异常，由调用方展示给用户。
+     **/
+    private String resolveReadPath() throws IOException {
+        if (bookFile != null && !bookFile.isEmpty() && bookFile.toLowerCase().endsWith(".epub")) {
+            File epub = new File(bookFile);
+            long modified = epub.lastModified();
+            if (epubTextFile == null || !epubTextFile.exists() || epubLastModified != modified) {
+                // 一次性拿到正文临时文件与目录（含正文行号），后面翻页/跳页都直接读临时 txt
+                EpubUtil.EpubBook pkg = EpubUtil.extract(epub);
+                epubTextFile = EpubUtil.writeTempFile(pkg);
+                epubToc = pkg.toc;
+                epubLastModified = modified;
+                // 换了临时文件，旧的指针缓存全部失效
+                seekDictionary.clear();
+            }
+            return epubTextFile.getAbsolutePath();
+        }
+        // 非 epub：清掉 epub 专属目录，避免上次 epub 残留目录条目
+        if (epubToc != null) {
+            epubToc = null;
+        }
+        return bookFile;
     }
 
     private Charset detectCharset(File file) throws IOException {

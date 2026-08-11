@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.thief.idea</id>
   <name>thief-book-idea</name>
-  <version>0.1.3</version>
+  <version>0.1.4</version>
   <vendor email="1340976576@qq.com" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
 
   <description>
@@ -12,9 +12,9 @@
     <p>
     <b>How to use? / 使用方式：</b>
     <br/>
-    1. Open Settings: File | Settings | Other Settings | Thief-Book Config, choose your txt book file / 打开设置页选择一本 txt 小说
+    1. Open Settings: File | Settings | Other Settings | Thief-Book Config, choose your txt / epub book file / 打开设置页选择一本 txt 或 epub 小说
     <br/>
-    2. Open the "thief-book" tool window at the bottom, click the refresh button / 打开底部 thief-book 窗口，点击刷新按钮加载
+    2. Open the "thief-book" tool window at the bottom, the book loads automatically / 打开底部 thief-book 窗口，自动加载上次阅读进度
     <br/>
     3. Enjoy reading! / 开始摸鱼！
     <br/>
@@ -33,12 +33,16 @@
     You can choose font, font size, lines per page, line spacing, hotkeys, etc. / 可自定义字体、字号、每页行数、行间距与热键
     <br/>
     Reading progress is saved automatically. / 阅读进度实时保存，下次自动续读
+    <br/>
+    Supports txt (GBK/UTF-8 auto-detected) and epub (auto-extracted) / 支持 txt（自动识别 GBK/UTF-8）与 epub（自动解包）
      ]]>
   </description>
 
   <change-notes>
     <![CDATA[
       <ul>
+        <li>新增 EPUB 电子书支持：自动解包正文并复用现有翻页/进度逻辑</li>
+        <li>epub 阅读界面左侧显示目录，点击可跳转到对应章节</li>
         <li>修复未选择书本时保存设置导致 IDE 报错的问题</li>
         <li>翻页/跳页/刷新的文件读取改为后台线程执行，不再阻塞 UI</li>
         <li>替换已废弃 API（ServiceManager、ContentFactory.SERVICE）</li>

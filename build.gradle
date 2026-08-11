@@ -4,10 +4,17 @@ plugins {
 }
 
 group = 'com.thief'
-version = '0.1.3'
+version = '0.1.4'
 
 repositories {
     mavenCentral()
+}
+
+dependencies {
+    // EPUB 容器/OPF/spine/目录（NCX、nav）解析
+    implementation 'com.positiondev.epublib:epublib-core:3.1'
+    // XHTML → 纯文本
+    implementation 'org.jsoup:jsoup:1.17.2'
 }
 
 java {
