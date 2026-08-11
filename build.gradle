@@ -37,6 +37,12 @@ patchPluginXml {
     untilBuild = ''
 }
 
+// 发布到 JetBrains Marketplace 的认证 token。
+// 优先读环境变量（CI），其次读 gradle 属性（本地命令行 -PpublishPluginToken=xxx）
+publishPlugin {
+    token = System.getenv('JETBRAINS_PLUGIN_TOKEN') ?: project.findProperty('publishPluginToken')
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }

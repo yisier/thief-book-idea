@@ -42,4 +42,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to JetBrains Marketplace
-        run: ./gradlew publishPlugin -PpluginVersion=${{ steps.ver.outputs.version }} -PpublishPluginToken=${{ secrets.JETBRAINS_PLUGIN_TOKEN }}
+        env:
+          JETBRAINS_PLUGIN_TOKEN: ${{ secrets.JETBRAINS_PLUGIN_TOKEN }}
+        run: ./gradlew publishPlugin -PpluginVersion=${{ steps.ver.outputs.version }}
