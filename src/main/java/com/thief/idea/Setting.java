@@ -72,7 +72,7 @@ public class Setting implements SearchableConfigurable {
                 || !Objects.equals(persistentState.getNext(), settingUi.next.getText())
                 || !Objects.equals(persistentState.getLineCount(), settingUi.lineCount.getSelectedItem().toString())
                 || !Objects.equals(persistentState.getLineSpace(), settingUi.lineSpace.getSelectedItem().toString())
-                || !Objects.equals(persistentState.getFontType(), settingUi.fontType.getSelectedItem().toString())
+                || !Objects.equals(persistentState.getFontType(), settingUi.getSelectedFontType())
                 || !Objects.equals(persistentState.getBossKey(), settingUi.bossKey.getText());
 
     }
@@ -84,7 +84,7 @@ public class Setting implements SearchableConfigurable {
         persistentState.setBefore(settingUi.before.getText());
         persistentState.setNext(settingUi.next.getText());
         persistentState.setLineCount(settingUi.lineCount.getSelectedItem().toString());
-        persistentState.setFontType(settingUi.fontType.getSelectedItem().toString());
+        persistentState.setFontType(settingUi.getSelectedFontType());
         persistentState.setLineSpace(settingUi.lineSpace.getSelectedItem().toString());
         persistentState.setBossKey(settingUi.bossKey.getText());
 

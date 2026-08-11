@@ -113,7 +113,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         if (type != null && !type.isEmpty() && !PersistentState.DEFAULT_FONT.equals(type)) {
             for (String family : GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames()) {
                 if (type.equals(family)) {
-                    return new Font(type, Font.PLAIN, s);
+                    return UIUtil.getFontWithFallback(new Font(type, Font.PLAIN, s));
                 }
             }
         }
