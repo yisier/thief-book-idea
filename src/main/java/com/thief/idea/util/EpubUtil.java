@@ -20,7 +20,9 @@ import java.io.Reader;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +30,8 @@ import java.util.Map;
 /**
  * EPUB 电子书解析：基于 epublib 解析容器/OPF/spine 与目录（EPUB2 NCX、EPUB3 nav 均支持），
  * 用 jsoup 把各章 XHTML 转成纯文本行（段落转行、实体解码）。
+ * 章节内的 &lt;img&gt; 会把图片字节解包到临时目录，并在正文中插入 [[IMG:文件名]] 占位行，
+ * 由阅读界面把占位渲染成行内图片。
  * 同时把每个目录项解析成正文行号，供主阅读界面展示目录并点击跳转。
  **/
 public class EpubUtil {
@@ -36,15 +40,25 @@ public class EpubUtil {
     }
 
     /**
-     * 一本书的解析结果：纯文本（UTF-8）+ 目录（已解析成正文行号）
+     * 一本书的解析结果：纯文本（UTF-8）+ 目录（已解析成正文行号）+ 图片临时目录（可为 null）
      **/
     public static class EpubBook {
         public final String text;
         public final List<TocEntry> toc;
 
+        /**
+         * 解包出的图片临时目录（无图片时为 null），目录内文件名与正文中的 [[IMG:文件名]] 占位对应
+         **/
+        public final File imageDir;
+
         public EpubBook(String text, List<TocEntry> toc) {
+            this(text, toc, null);
+        }
+
+        public EpubBook(String text, List<TocEntry> toc, File imageDir) {
             this.text = text;
             this.toc = toc;
+            this.imageDir = imageDir;
         }
     }
 
@@ -85,6 +99,15 @@ public class EpubUtil {
         Map<String, Integer> chapterStartLine = new HashMap<>();
         Map<String, List<ExtractedLine>> chapterLines = new HashMap<>();
         Map<String, String> chapterHtml = new HashMap<>();
+        // 全书的图片资源（按 href 归一化索引），供章节内 <img> 按相对路径解析
+        Map<String, Resource> resourceByHref = new HashMap<>();
+        for (Resource r : book.getResources().getAll()) {
+            String key = normalize(r.getHref());
+            if (key != null && !resourceByHref.containsKey(key)) {
+                resourceByHref.put(key, r);
+            }
+        }
+        ImageExport images = new ImageExport(resourceByHref);
         for (SpineReference ref : refs) {
             Resource res = ref.getResource();
             if (res == null) {
@@ -98,7 +121,7 @@ public class EpubUtil {
             try (Reader reader = res.getReader()) {
                 html = readAll(reader);
             }
-            List<ExtractedLine> lines = htmlToLines(html);
+            List<ExtractedLine> lines = htmlToLines(html, images, href);
             if (lines.isEmpty()) {
                 continue;
             }
@@ -122,7 +145,7 @@ public class EpubUtil {
         }
 
         List<TocEntry> toc = extractToc(book, chapterStartLine, chapterLines, chapterHtml, firstKey);
-        return new EpubBook(sb.toString(), toc);
+        return new EpubBook(sb.toString(), toc, images.dir);
     }
 
     /**
@@ -240,17 +263,19 @@ public class EpubUtil {
     /**
      * XHTML → 纯文本行：用 jsoup 解析，块级元素/br 断行，跳过 head/script/style 内容，
      * 实体由 jsoup 解码；每行记录第一个文本节点在源码中的偏移（供锚点定位）。
+     * &lt;img&gt; 会被导出成临时图片文件，并输出一行 [[IMG:文件名]] 占位。
      **/
-    static List<ExtractedLine> htmlToLines(String html) {
+    static List<ExtractedLine> htmlToLines(String html, ImageExport images, String chapterHref) {
         Document doc = Parser.htmlParser().setTrackPosition(true).parseInput(html, "");
         List<ExtractedLine> lines = new ArrayList<>();
         LineBuffer buffer = new LineBuffer();
-        walkLines(doc.body(), buffer, lines);
+        walkLines(doc.body(), buffer, lines, images, chapterHref);
         buffer.flush(lines);
         return lines;
     }
 
-    private static void walkLines(Node node, LineBuffer buffer, List<ExtractedLine> out) {
+    private static void walkLines(Node node, LineBuffer buffer, List<ExtractedLine> out,
+                                  ImageExport images, String chapterHref) {
         if (node instanceof TextNode) {
             TextNode textNode = (TextNode) node;
             int pos = textNode.sourceRange().start().pos();
@@ -266,11 +291,22 @@ public class EpubUtil {
             buffer.flush(out);
             return;
         }
+        if (name.equals("img")) {
+            // 图片独立成行：导出图片字节并输出占位行
+            buffer.flush(out);
+            String fileName = images.export(el, chapterHref);
+            if (fileName != null) {
+                Range range = el.sourceRange();
+                int pos = range.isTracked() ? range.start().pos() : 0;
+                out.add(new ExtractedLine("[[IMG:" + fileName + "]]", Math.max(pos, 0)));
+            }
+            return;
+        }
         if (isBlock(name)) {
             buffer.flush(out);
         }
         for (Node child : el.childNodes()) {
-            walkLines(child, buffer, out);
+            walkLines(child, buffer, out, images, chapterHref);
         }
     }
 
@@ -281,6 +317,108 @@ public class EpubUtil {
                 || name.equals("dt") || name.equals("dd") || name.equals("figure") || name.equals("figcaption")
                 || name.equals("h1") || name.equals("h2") || name.equals("h3")
                 || name.equals("h4") || name.equals("h5") || name.equals("h6");
+    }
+
+    /**
+     * 章节内 &lt;img&gt; 的导出：把 src 解析到全书资源，图片字节写入临时目录，
+     * 返回临时文件名（正文中以 [[IMG:文件名]] 占位，供阅读界面渲染）。
+     * 解析失败（外链/资源缺失/写入失败）返回 null，该图片按无图处理。
+     **/
+    static class ImageExport {
+        private final Map<String, Resource> resourceByHref;
+        private File dir;
+
+        ImageExport(Map<String, Resource> resourceByHref) {
+            this.resourceByHref = resourceByHref;
+        }
+
+        /**
+         * 导出 &lt;img&gt; 对应的图片资源，成功返回临时文件名，失败返回 null
+         **/
+        String export(Element img, String chapterHref) {
+            String src = img.attr("src");
+            if (src == null || src.isEmpty()) {
+                return null;
+            }
+            String resolved = resolveHref(chapterHref, src);
+            if (resolved == null) {
+                return null;
+            }
+            Resource res = resourceByHref.get(normalize(resolved));
+            if (res == null) {
+                return null;
+            }
+            byte[] data;
+            try {
+                data = res.getData();
+            } catch (Exception e) {
+                return null;
+            }
+            if (data == null || data.length == 0) {
+                return null;
+            }
+            if (dir == null) {
+                try {
+                    dir = Files.createTempDirectory("thief-book-img-").toFile();
+                } catch (IOException e) {
+                    return null;
+                }
+            }
+            String name = safeFileName(normalize(resolved));
+            File out = new File(dir, name);
+            try {
+                if (!out.exists()) {
+                    Files.write(out.toPath(), data);
+                    out.deleteOnExit();
+                }
+                return name;
+            } catch (IOException e) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * 把章节内相对 src 解析成相对 OPF 的路径（处理 ./ 与 ../ 与绝对路径），
+     * 外链（http/https/data:）或解析失败返回 null
+     **/
+    private static String resolveHref(String chapterHref, String src) {
+        String s = src.trim();
+        if (s.isEmpty() || s.startsWith("http://") || s.startsWith("https://") || s.startsWith("data:")) {
+            return null;
+        }
+        try {
+            s = URLDecoder.decode(s, StandardCharsets.UTF_8.name());
+        } catch (Exception ignored) {
+        }
+        int slash = chapterHref.lastIndexOf('/');
+        String combined = (slash >= 0 ? chapterHref.substring(0, slash + 1) : "") + s;
+        Deque<String> stack = new ArrayDeque<>();
+        for (String part : combined.split("/")) {
+            if (part.isEmpty() || part.equals(".")) {
+                continue;
+            }
+            if (part.equals("..")) {
+                if (!stack.isEmpty()) {
+                    stack.removeLast();
+                }
+            } else {
+                stack.addLast(part);
+            }
+        }
+        if (stack.isEmpty()) {
+            return null;
+        }
+        return String.join("/", stack);
+    }
+
+    /**
+     * 资源 href → 安全文件名：目录分隔符与非法字符替换成下划线，保留扩展名
+     **/
+    private static String safeFileName(String key) {
+        String name = key.replace('/', '_').replace('\\', '_')
+                .replaceAll("[^A-Za-z0-9._-]", "_");
+        return name.isEmpty() ? "img" : name;
     }
 
     /**

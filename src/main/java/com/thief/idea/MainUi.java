@@ -15,6 +15,10 @@ import com.thief.idea.util.HotkeyUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 import java.awt.*;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
@@ -38,6 +42,8 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainUi implements ToolWindowFactory, DumbAware {
 
@@ -132,7 +138,32 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     /**
      * 阅读区显示
      **/
-    private JTextArea textArea;
+    private JTextPane textPane;
+
+    /**
+     * 阅读区滚动面板：内容溢出时显示垂直滚动条，随窗口大小自适应
+     **/
+    private JScrollPane scrollPane;
+
+    /**
+     * epub 解包出的图片临时目录（非 epub 或无图片时为 null），正文中的 [[IMG:文件名]] 占位以此目录解析
+     **/
+    private File epubImageDir;
+
+    /**
+     * 最近一次渲染进阅读区的原始文本（含图片占位），老板键恢复时用于还原含图片的页面
+     **/
+    private String lastContent;
+
+    /**
+     * 正文图片占位前缀，仅 epub 正文含图片时出现
+     **/
+    private static final String IMG_PREFIX = "[[IMG:";
+
+    /**
+     * 正文图片占位匹配：[[IMG:文件名]]
+     **/
+    private static final Pattern IMG_MARKER = Pattern.compile("\\[\\[IMG:([^\\]]+)]]");
 
     /**
      * 书本切换下拉框：设置页选择了多本书时显示，切换即换书并恢复该书进度
@@ -293,12 +324,26 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     private JPanel initPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BorderLayout());
-        textArea = initTextArea();
+        textPane = initTextPane();
         panel.add(initBookBar(), BorderLayout.NORTH);
-        panel.add(textArea, BorderLayout.CENTER);
+        panel.add(initScrollPane(), BorderLayout.CENTER);
         panel.add(initTocPanel(), BorderLayout.WEST);
         panel.add(initOperationPanel(), BorderLayout.EAST);
         return panel;
+    }
+
+    /**
+     * 阅读区滚动面板：内容溢出（窗口过小、正文超长等）时出现垂直滚动条，
+     * 窗口大小变化时自动重排，无需手动设置
+     **/
+    private JScrollPane initScrollPane() {
+        scrollPane = new JScrollPane(textPane);
+        scrollPane.setBorder(JBUI.Borders.empty());
+        // 与 textPane.setOpaque(false) 保持一致，让阅读区背景跟随工具窗口
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        return scrollPane;
     }
 
     /**
@@ -357,20 +402,87 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     }
 
     /**
-     * 正文区域初始化
+     * 正文区域初始化：JTextPane 支持行内图标，用于渲染 epub 解包出的图片
      **/
-    private JTextArea initTextArea() {
-        JTextArea textArea = new JTextArea();
-        //初始化显示文字
-        textArea.setText(temp);
-        textArea.setOpaque(false);
-        textArea.setTabSize(4);
-        textArea.setEditable(false);
-        textArea.setLineWrap(true);
-        textArea.setWrapStyleWord(true);
-        textArea.setFont(resolveFont());
-        textArea.setBorder(JBUI.Borders.empty(10, 30));
-        return textArea;
+    private JTextPane initTextPane() {
+        JTextPane textPane = new JTextPane();
+        textPane.setOpaque(false);
+        textPane.setEditable(false);
+        textPane.setBorder(JBUI.Borders.empty(10, 30));
+        textPane.setCaretPosition(0);
+        return textPane;
+    }
+
+    /**
+     * 设置正文：普通文本直接渲染；epub 正文含图片占位（[[IMG:文件名]]）时，
+     * 按图片临时目录把占位替换成等比缩放的行内图片。
+     * 同时记录原始文本（含占位），供老板键隐藏/恢复时还原页面。
+     **/
+    private void setPageText(String content) {
+        lastContent = content;
+        Font font = resolveFont();
+        textPane.setFont(font);
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setFontFamily(attrs, font.getFamily());
+        StyleConstants.setFontSize(attrs, font.getSize());
+        StyledDocument doc = textPane.getStyledDocument();
+        try {
+            doc.remove(0, doc.getLength());
+            if (epubImageDir != null && content.indexOf(IMG_PREFIX) >= 0) {
+                Matcher m = IMG_MARKER.matcher(content);
+                int last = 0;
+                while (m.find()) {
+                    if (m.start() > last) {
+                        doc.insertString(doc.getLength(), content.substring(last, m.start()), attrs);
+                    }
+                    Icon icon = loadPageIcon(m.group(1));
+                    if (icon != null) {
+                        textPane.setCaretPosition(doc.getLength());
+                        textPane.insertIcon(icon);
+                    }
+                    last = m.end();
+                }
+                if (last < content.length()) {
+                    doc.insertString(doc.getLength(), content.substring(last), attrs);
+                }
+            } else {
+                doc.insertString(0, content, attrs);
+            }
+            textPane.setCaretPosition(0);
+            // 新页面从顶部开始显示，避免停留在上一页的滚动位置
+            if (scrollPane != null) {
+                scrollPane.getVerticalScrollBar().setValue(0);
+            }
+        } catch (BadLocationException e) {
+            textPane.setText(content);
+        }
+    }
+
+    /**
+     * 按图片临时目录里的文件名加载图片并等比缩放到阅读区宽度内，加载失败返回 null
+     **/
+    private Icon loadPageIcon(String fileName) {
+        if (epubImageDir == null) {
+            return null;
+        }
+        File file = new File(epubImageDir, fileName);
+        if (!file.isFile()) {
+            return null;
+        }
+        ImageIcon icon = new ImageIcon(file.getAbsolutePath());
+        int w = icon.getIconWidth();
+        int h = icon.getIconHeight();
+        if (w <= 0 || h <= 0) {
+            return null;
+        }
+        int maxWidth = Math.max(200, textPane.getWidth() - 40);
+        int maxHeight = 480;
+        double scale = Math.min(1.0, Math.min((double) maxWidth / w, (double) maxHeight / h));
+        if (scale < 1.0) {
+            icon.setImage(icon.getImage().getScaledInstance(
+                    Math.max(1, (int) (w * scale)), Math.max(1, (int) (h * scale)), Image.SCALE_SMOOTH));
+        }
+        return icon;
     }
 
     /**
@@ -450,7 +562,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             countSeek();
             return readBook();
         }, content -> {
-            textArea.setText(content);
+            setPageText(content);
             saveProgress();
             current.setText(" " + currentPage / lineCount);
             updatePageInfo();
@@ -575,13 +687,13 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                             }
                             return readBook();
                         }, content -> {
-                            textArea.setText(content);
+                            setPageText(content);
                             saveProgress();
                             current.setText(" " + currentPage / lineCount);
                             syncTocSelection();
                         });
                     } catch (NumberFormatException e2) {
-                        textArea.setText("请输入数字");
+                        setPageText("请输入数字");
                     }
 
                 }
@@ -595,7 +707,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      * 打开窗口、切书与设置页 apply() 均调用本方法，设置修改后无需手动刷新即可生效。
      **/
     public void refresh() {
-        if (textArea == null) {
+        if (textPane == null) {
             return;
         }
         try {
@@ -626,10 +738,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
 
             if (bookFile == null || bookFile.isEmpty()) {
                 totalLine = 0;
-                textArea.setText(temp);
+                setPageText(temp);
                 updatePageInfo();
                 updateTocPanel();
-                textArea.setFont(resolveFont());
                 return;
             }
             // 仅在切书或尚未统计过时才全量扫描行数，避免每次刷新都重扫大文件
@@ -653,11 +764,10 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 }
                 return content;
             }, content -> {
-                textArea.setText(content);
+                setPageText(content);
                 updatePageInfo();
                 updateTocPanel();
                 syncTocSelection();
-                textArea.setFont(resolveFont());
             })) {
                 // 正在翻页/读取中：标记稍后自动重试，确保设置修改必然生效
                 pendingRefresh.set(true);
@@ -694,7 +804,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 countSeek();
                 return readBook();
             }, content -> {
-                textArea.setText(content);
+                setPageText(content);
                 saveProgress();
                 current.setText(" " + currentPage / lineCount);
                 syncTocSelection();
@@ -723,7 +833,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 }
                 return readBook();
             }, content -> {
-                textArea.setText(content);
+                setPageText(content);
                 saveProgress();
                 current.setText(" " + (currentPage % lineCount == 0 ? currentPage / lineCount : currentPage / lineCount + 1));
                 syncTocSelection();
@@ -754,8 +864,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             if (tocPanel != null) {
                 tocPanel.setVisible(epubToc != null && !epubToc.isEmpty());
             }
-            textArea.setText(temp);
-            textArea.setFont(resolveFont());
+            setPageText(temp);
             if (content != null) {
                 content.setDisplayName("Thief-Book");
             }
@@ -775,9 +884,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             if (tocPanel != null) {
                 tocPanel.setVisible(false);
             }
-            temp = textArea.getText();
-            textArea.setText(BOSS_FAKE_TEXT);
-            textArea.setFont(UIUtil.getFontWithFallback(new Font(Font.MONOSPACED, Font.PLAIN, 12)));
+            temp = lastContent != null ? lastContent : textPane.getText();
+            textPane.setText(BOSS_FAKE_TEXT);
+            textPane.setFont(UIUtil.getFontWithFallback(new Font(Font.MONOSPACED, Font.PLAIN, 12)));
             if (content != null) {
                 content.setDisplayName("Terminal");
             }
@@ -936,8 +1045,12 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             File epub = new File(bookFile);
             long modified = epub.lastModified();
             if (epubTextFile == null || !epubTextFile.exists() || epubLastModified != modified) {
-                // 一次性拿到正文临时文件与目录（含正文行号），后面翻页/跳页都直接读临时 txt
+                // 一次性拿到正文临时文件、图片目录与目录（含正文行号），后面翻页/跳页都直接读临时 txt
                 EpubUtil.EpubBook pkg = EpubUtil.extract(epub);
+                if (epubImageDir != null) {
+                    deleteRecursively(epubImageDir);
+                }
+                epubImageDir = pkg.imageDir;
                 epubTextFile = EpubUtil.writeTempFile(pkg);
                 epubToc = pkg.toc;
                 epubLastModified = modified;
@@ -946,11 +1059,29 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             }
             return epubTextFile.getAbsolutePath();
         }
-        // 非 epub：清掉 epub 专属目录，避免上次 epub 残留目录条目
+        // 非 epub：清掉 epub 专属目录与图片目录，避免上次 epub 残留目录条目/图片
         if (epubToc != null) {
             epubToc = null;
         }
+        epubImageDir = null;
         return bookFile;
+    }
+
+    /**
+     * 递归删除临时目录（重新解包 epub 时清理上一版的图片目录）
+     **/
+    private void deleteRecursively(File dir) {
+        File[] files = dir.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                if (f.isDirectory()) {
+                    deleteRecursively(f);
+                } else {
+                    f.delete();
+                }
+            }
+        }
+        dir.delete();
     }
 
     private Charset detectCharset(File file) throws IOException {
@@ -1070,7 +1201,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 e.printStackTrace();
                 final String msg = e.getMessage() != null ? e.getMessage() : e.toString();
                 ApplicationManager.getApplication().invokeLater(() -> {
-                    textArea.setText(msg);
+                    setPageText(msg);
                     busy.set(false);
                     retryPendingRefresh();
                 });
