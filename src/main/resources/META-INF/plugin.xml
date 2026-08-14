@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.thief.idea</id>
   <name>thief-book-idea</name>
-  <version>0.1.4</version>
+  <version>0.1.5</version>
   <vendor email="1340976576@qq.com" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
 
   <description>
@@ -40,6 +40,11 @@
 
   <change-notes>
     <![CDATA[
+      <h3>0.1.5</h3>
+      <ul>
+        <li>EPUB 正文支持图片显示：自动解包图片并等比缩放渲染，插图小说也可直接阅读</li>
+        <li>阅读区支持上下滚动：正文溢出时自动出现滚动条，随窗口大小自适应</li>
+      </ul>
       <h3>0.1.4</h3>
       <ul>
         <li>新增 EPUB 电子书支持：自动解包正文并复用现有翻页/进度逻辑</li>
