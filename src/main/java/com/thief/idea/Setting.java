@@ -73,7 +73,8 @@ public class Setting implements SearchableConfigurable {
                 || !Objects.equals(persistentState.getLineCount(), settingUi.lineCount.getSelectedItem().toString())
                 || !Objects.equals(persistentState.getLineSpace(), settingUi.lineSpace.getSelectedItem().toString())
                 || !Objects.equals(persistentState.getFontType(), settingUi.getSelectedFontType())
-                || !Objects.equals(persistentState.getBossKey(), settingUi.bossKey.getText());
+                || !Objects.equals(persistentState.getBossKey(), settingUi.bossKey.getText())
+                || !Objects.equals(persistentState.getTtsKey(), settingUi.ttsKey.getText());
 
     }
 
@@ -87,6 +88,7 @@ public class Setting implements SearchableConfigurable {
         persistentState.setFontType(settingUi.getSelectedFontType());
         persistentState.setLineSpace(settingUi.lineSpace.getSelectedItem().toString());
         persistentState.setBossKey(settingUi.bossKey.getText());
+        persistentState.setTtsKey(settingUi.ttsKey.getText());
 
         // 让已打开的工具窗口立即应用新设置，无需再手动点刷新
         MainUi mainUi = MainUi.getInstance(project);

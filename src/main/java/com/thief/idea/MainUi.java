@@ -10,6 +10,8 @@ import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
+import com.thief.idea.tts.TtsEngines;
+import com.thief.idea.tts.TtsService;
 import com.thief.idea.util.EpubUtil;
 import com.thief.idea.util.HotkeyUtil;
 import org.jetbrains.annotations.NotNull;
@@ -216,6 +218,11 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     private KeyStroke bossKeyStroke;
 
     /**
+     * 朗读播放/停止热键（设置页可修改）
+     **/
+    private KeyStroke ttsKeyStroke;
+
+    /**
      * 老板键按钮（5x5 隐形小按钮）
      **/
     private JButton bossButton;
@@ -285,6 +292,47 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      * 保证设置页点击 Apply 后新设置必然生效
      **/
     private final AtomicBoolean pendingRefresh = new AtomicBoolean(false);
+
+    /**
+     * 朗读服务：后台线程逐页朗读，读完自动翻下一页
+     **/
+    private TtsService ttsService;
+
+    /**
+     * 朗读按钮：未朗读时显示"播放"，朗读中显示"停止"，点击即开始/停止
+     **/
+    private JButton ttsPlayButton;
+
+    /**
+     * 朗读控制面板（老板键隐藏/恢复时一并处理）
+     **/
+    private JPanel ttsPanel;
+
+    /**
+     * 朗读语音 / 语速选择
+     **/
+    private JComboBox<String> ttsVoiceCombo;
+    private JComboBox<String> ttsRateCombo;
+
+    /**
+     * 朗读取页串行锁：避免与手动翻页同时读写文件指针
+     **/
+    private final Object ttsPageLock = new Object();
+
+    /**
+     * 朗读启动时首屏直接朗读当前页，之后才翻页
+     **/
+    private volatile boolean ttsFirstPage;
+
+    /**
+     * 语音下拉中代表系统默认的项
+     **/
+    private static final String TTS_DEFAULT_VOICE = "System Default";
+
+    /**
+     * 可选语速倍率
+     **/
+    private static final String[] TTS_RATES = {"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"};
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
@@ -378,6 +426,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         combo.addActionListener(e -> {
             Object selected = combo.getSelectedItem();
             if (selected != null && !Objects.equals(selected, bookFile)) {
+                stopTts();
                 persistentState.setBookPathText(selected.toString());
                 refresh();
             }
@@ -556,6 +605,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         if (index < 0 || epubToc == null || index >= epubToc.size()) {
             return;
         }
+        stopTts();
         final int line = epubToc.get(index).line;
         runIoAsync(() -> {
             currentPage = line;
@@ -608,7 +658,8 @@ public class MainUi implements ToolWindowFactory, DumbAware {
 
         JPanel panelRight = new JPanel();
         panelRight.setBorder(JBUI.Borders.empty(0, 20));
-        panelRight.setPreferredSize(new Dimension(280, 30));
+        panelRight.setPreferredSize(new Dimension(280, 90));
+        panelRight.add(initTtsPanel(), BorderLayout.NORTH);
         panelRight.add(current, BorderLayout.EAST);
         panelRight.add(total, BorderLayout.EAST);
         //上一页
@@ -625,15 +676,278 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     }
 
     /**
+     * 朗读控制面板：第一行播放/停止按钮，第二行语音/语速。
+     * 右侧操作区宽 280px 且为 FlowLayout，面板须显式限宽，否则会被居中裁掉两侧控件。
+     **/
+    private JPanel initTtsPanel() {
+        JPanel panel = new JPanel(new GridLayout(2, 1, 0, 2));
+        panel.setPreferredSize(new Dimension(250, 56));
+        this.ttsPanel = panel;
+
+        ttsPlayButton = new JButton("Play");
+        ttsPlayButton.setMargin(new Insets(1, 6, 1, 6));
+        ttsPlayButton.addActionListener(e -> toggleTts());
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        buttons.add(ttsPlayButton);
+
+        ttsVoiceCombo = new JComboBox<>();
+        ttsVoiceCombo.setPreferredSize(new Dimension(150, 24));
+        ttsVoiceCombo.setToolTipText("Offline TTS voice (uses voices installed in the OS)");
+        ttsVoiceCombo.addActionListener(e -> applyTtsConfigToService());
+
+        ttsRateCombo = new JComboBox<>(TTS_RATES);
+        ttsRateCombo.setPreferredSize(new Dimension(72, 24));
+        ttsRateCombo.setToolTipText("Speech rate");
+        ttsRateCombo.setSelectedItem(rateLabelFor(persistentState.getTtsRate()));
+        ttsRateCombo.addActionListener(e -> applyTtsConfigToService());
+
+        JPanel selects = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        selects.add(ttsVoiceCombo);
+        selects.add(ttsRateCombo);
+
+        panel.add(buttons);
+        panel.add(selects);
+
+        populateTtsVoicesAsync();
+        updateTtsButtons();
+        return panel;
+    }
+
+    /**
+     * 异步枚举系统语音填充下拉（Windows 走 SAPI，可能需要几百毫秒，避免卡 UI）
+     **/
+    private void populateTtsVoicesAsync() {
+        if (!TtsEngines.isSupported()) {
+            ttsVoiceCombo.removeAllItems();
+            ttsVoiceCombo.addItem(TTS_DEFAULT_VOICE);
+            ttsVoiceCombo.setEnabled(false);
+            return;
+        }
+        final String saved = persistentState.getTtsVoice();
+        Thread thread = new Thread(() -> {
+            String[] voices = TtsEngines.listVoices();
+            ApplicationManager.getApplication().invokeLater(() -> {
+                if (ttsVoiceCombo == null) {
+                    return;
+                }
+                ttsVoiceCombo.removeAllItems();
+                ttsVoiceCombo.addItem(TTS_DEFAULT_VOICE);
+                for (String voice : voices) {
+                    ttsVoiceCombo.addItem(voice);
+                }
+                if (saved != null && !saved.isEmpty() && containsItem(ttsVoiceCombo, saved)) {
+                    ttsVoiceCombo.setSelectedItem(saved);
+                }
+            });
+        }, "thief-book-tts-voices");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private static boolean containsItem(JComboBox<String> combo, String item) {
+        for (int i = 0; i < combo.getItemCount(); i++) {
+            if (item.equals(combo.getItemAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 选择/语速变化时：正在朗读则即时生效，并写入持久化配置
+     **/
+    private void applyTtsConfigToService() {
+        String voice = selectedTtsVoice();
+        double rate = selectedTtsRate();
+        if (ttsService != null && ttsService.isRunning()) {
+            ttsService.setVoice(voice);
+            ttsService.setRate(rate);
+        }
+        persistentState.setTtsVoice(voice);
+        persistentState.setTtsRate(String.valueOf(rate));
+        // 下拉关闭后会截断长语音名，悬停时显示完整名称（含语言）
+        if (ttsVoiceCombo != null && ttsVoiceCombo.getSelectedItem() != null) {
+            ttsVoiceCombo.setToolTipText(ttsVoiceCombo.getSelectedItem().toString());
+        }
+    }
+
+    /**
+     * 开始朗读：从当前页起，读完自动翻下一页
+     **/
+    private void startTts() {
+        if (ttsService != null && ttsService.isRunning()) {
+            return;
+        }
+        if (bookFile == null || bookFile.isEmpty()) {
+            setPageText("Select a book in settings first");
+            return;
+        }
+        if (!TtsEngines.isSupported()) {
+            setPageText("Offline TTS is not supported on this platform");
+            return;
+        }
+        ttsFirstPage = true;
+        ttsService = new TtsService(this::ttsNextPage, this::onTtsStateChanged);
+        ttsService.setVoice(selectedTtsVoice());
+        ttsService.setRate(selectedTtsRate());
+        ttsService.start();
+        updateTtsButtons();
+    }
+
+    /**
+     * 停止朗读
+     **/
+    private void stopTts() {
+        TtsService service = ttsService;
+        if (service != null) {
+            service.stop();
+        }
+    }
+
+    /**
+     * 播放 / 停止切换
+     **/
+    private void toggleTts() {
+        TtsService service = ttsService;
+        if (service != null && service.isRunning()) {
+            service.stop();
+        } else {
+            startTts();
+        }
+    }
+
+    /**
+     * 朗读线程取下一页文本：首次返回当前显示页，之后翻页读取。
+     * 翻页后通过 invokeLater 回到 EDT 更新界面与进度。
+     **/
+    private String ttsNextPage() {
+        synchronized (ttsPageLock) {
+            if (bookFile == null || bookFile.isEmpty()) {
+                return null;
+            }
+            try {
+                if (ttsFirstPage) {
+                    ttsFirstPage = false;
+                    String shown = lastContent != null ? lastContent : (textPane != null ? textPane.getText() : "");
+                    return cleanForTts(shown);
+                }
+                if (totalLine > 0 && currentPage >= totalLine) {
+                    return null;
+                }
+                int before = currentPage;
+                if (currentPage / lineCount <= 1) {
+                    countSeek();
+                }
+                ensureCharset();
+                final String content = readBook();
+                if (currentPage == before && cleanForTts(content).isEmpty()) {
+                    return null;
+                }
+                final String shown = content;
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    setPageText(shown);
+                    saveProgress();
+                    current.setText(" " + (currentPage % lineCount == 0 ? currentPage / lineCount : currentPage / lineCount + 1));
+                    syncTocSelection();
+                });
+                return cleanForTts(content);
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+    }
+
+    /**
+     * 去掉 epub 图片占位等非朗读内容
+     **/
+    private String cleanForTts(String text) {
+        if (text == null) {
+            return "";
+        }
+        return IMG_MARKER.matcher(text).replaceAll(" ").trim();
+    }
+
+    /**
+     * 朗读状态变化（后台线程回调）：切回 EDT 刷新按钮
+     **/
+    private void onTtsStateChanged() {
+        try {
+            ApplicationManager.getApplication().invokeLater(this::updateTtsButtons);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 按朗读状态刷新按钮文案
+     **/
+    private void updateTtsButtons() {
+        if (ttsPlayButton == null) {
+            return;
+        }
+        boolean running = ttsService != null && ttsService.isRunning();
+        ttsPlayButton.setText(running ? "Stop" : "Play");
+    }
+
+    private String selectedTtsVoice() {
+        Object selected = ttsVoiceCombo != null ? ttsVoiceCombo.getSelectedItem() : null;
+        if (selected == null) {
+            return "";
+        }
+        String value = selected.toString();
+        return TTS_DEFAULT_VOICE.equals(value) ? "" : value;
+    }
+
+    private double selectedTtsRate() {
+        Object selected = ttsRateCombo != null ? ttsRateCombo.getSelectedItem() : null;
+        if (selected == null) {
+            return 1.0;
+        }
+        try {
+            return Double.parseDouble(selected.toString().replace("x", "").trim());
+        } catch (NumberFormatException e) {
+            return 1.0;
+        }
+    }
+
+    /**
+     * 把持久化的倍率文本映射为下拉标签，找不到时回退 1.0x
+     **/
+    private String rateLabelFor(String rate) {
+        double target = 1.0;
+        try {
+            target = Double.parseDouble(rate);
+        } catch (Exception ignored) {
+        }
+        for (String label : TTS_RATES) {
+            if (Math.abs(selectedRateValue(label) - target) < 0.001) {
+                return label;
+            }
+        }
+        return "1.0x";
+    }
+
+    private static double selectedRateValue(String label) {
+        try {
+            return Double.parseDouble(label.replace("x", "").trim());
+        } catch (NumberFormatException e) {
+            return 1.0;
+        }
+    }
+
+    /**
      * 从设置读取热键并绑定：上一页/下一页仅工具窗口内生效，老板键全局生效。
      * refresh() 会重新调用本方法，使设置页修改的热键即时生效。
      **/
     private void updateHotkeys() {
         KeyStroke oldPrev = prevKeyStroke;
         KeyStroke oldNext = nextKeyStroke;
+        KeyStroke oldTts = ttsKeyStroke;
         prevKeyStroke = HotkeyUtil.parse(persistentState.getBefore());
         nextKeyStroke = HotkeyUtil.parse(persistentState.getNext());
         bossKeyStroke = HotkeyUtil.parse(persistentState.getBossKey());
+        ttsKeyStroke = HotkeyUtil.parse(persistentState.getTtsKey());
         if (upButton == null || downButton == null) {
             return;
         }
@@ -648,6 +962,14 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         }
         if (nextKeyStroke != null) {
             downButton.registerKeyboardAction(downButton.getActionListeners()[0], nextKeyStroke, JComponent.WHEN_IN_FOCUSED_WINDOW);
+        }
+        if (ttsPlayButton != null) {
+            if (oldTts != null) {
+                ttsPlayButton.unregisterKeyboardAction(oldTts);
+            }
+            if (ttsKeyStroke != null) {
+                ttsPlayButton.registerKeyboardAction(ttsPlayButton.getActionListeners()[0], ttsKeyStroke, JComponent.WHEN_IN_FOCUSED_WINDOW);
+            }
         }
     }
 
@@ -665,6 +987,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             public void keyPressed(KeyEvent e) {
                 //判断按下的键是否是回车键
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    stopTts();
                     try {
                         String input = current.getText();
                         String inputCurrent = input.split("/")[0].trim();
@@ -710,6 +1033,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         if (textPane == null) {
             return;
         }
+        stopTts();
         try {
             persistentState = PersistentState.getInstance();
             String bookPath = persistentState.getBookPathText();
@@ -786,6 +1110,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         afterB.setContentAreaFilled(false);
         afterB.setBorderPainted(false);
         afterB.addActionListener(e -> {
+            stopTts();
             if (currentPage > totalLine) {
                 return;
             }
@@ -823,7 +1148,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         nextB.setContentAreaFilled(false);
         nextB.setBorderPainted(false);
         nextB.addActionListener(e -> {
-
+            stopTts();
             if (currentPage >= totalLine) {
                 return;
             }
@@ -864,6 +1189,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             if (tocPanel != null) {
                 tocPanel.setVisible(epubToc != null && !epubToc.isEmpty());
             }
+            if (ttsPanel != null) {
+                ttsPanel.setVisible(true);
+            }
             setPageText(temp);
             if (content != null) {
                 content.setDisplayName("Thief-Book");
@@ -873,6 +1201,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             }
             hide = false;
         } else {
+            stopTts();
             for (JButton b : buttons) {
                 b.setVisible(false);
             }
@@ -883,6 +1212,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             }
             if (tocPanel != null) {
                 tocPanel.setVisible(false);
+            }
+            if (ttsPanel != null) {
+                ttsPanel.setVisible(false);
             }
             temp = lastContent != null ? lastContent : textPane.getText();
             textPane.setText(BOSS_FAKE_TEXT);
@@ -916,7 +1248,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     /**
      * 向下读取文件
      **/
-    private String readBook() throws IOException {
+    private synchronized String readBook() throws IOException {
         RandomAccessFile ra = null;
         StringBuilder str = new StringBuilder();
         try {
@@ -988,7 +1320,7 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     /**
      * 找到当前指针应在位置
      **/
-    private void countSeek() throws IOException {
+    private synchronized void countSeek() throws IOException {
         RandomAccessFile ra = null;
 
         try {

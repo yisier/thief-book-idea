@@ -7,6 +7,7 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.jgoodies.forms.layout.CellConstraints;
 import com.jgoodies.forms.layout.FormLayout;
+import com.jgoodies.forms.layout.RowSpec;
 import com.thief.idea.PersistentState;
 import com.thief.idea.util.HotkeyUtil;
 
@@ -74,6 +75,7 @@ public class SettingUi {
     public JLabel label5;
     public JTextField next;
     public JTextField bossKey;
+    public JTextField ttsKey;
     public JButton removeBookButton;
     public JButton addBookButton;
     public JList bookList = new JList();
@@ -178,6 +180,19 @@ public class SettingUi {
         installHotkeyCapture(before);
         installHotkeyCapture(next);
         installHotkeyCapture(bossKey);
+
+        // TTS 播放/停止热键：运行时给 Hotkeys 面板追加一行，
+        // 不改 GUI Designer 生成代码（$$$setupUI$$$），保持 .form 与生成代码一致
+        ttsKey = new JTextField();
+        ttsKey.setToolTipText("Click, then press a key combination. Backspace to clear.");
+        FormLayout hotkeyLayout = (FormLayout) hotkeysPanel.getLayout();
+        hotkeyLayout.appendRow(new RowSpec("6dlu"));
+        hotkeyLayout.appendRow(new RowSpec("center:default:grow"));
+        CellConstraints ttsConstraints = new CellConstraints();
+        JLabel ttsKeyLabel = new JLabel("TTS key:");
+        hotkeysPanel.add(ttsKeyLabel, ttsConstraints.xy(2, 11));
+        hotkeysPanel.add(ttsKey, ttsConstraints.xy(4, 11, CellConstraints.FILL, CellConstraints.DEFAULT));
+        installHotkeyCapture(ttsKey);
     }
 
     /**
@@ -234,6 +249,7 @@ public class SettingUi {
         lineCount.setSelectedItem(persistentState.getLineCount());
         lineSpace.setSelectedItem(persistentState.getLineSpace());
         bossKey.setText(persistentState.getBossKey());
+        ttsKey.setText(persistentState.getTtsKey());
         updateFontPreview();
     }
 

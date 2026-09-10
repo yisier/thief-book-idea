@@ -49,6 +49,21 @@ public class PersistentState implements PersistentStateComponent<Element> {
     private String bossKey;
 
     /**
+     * 朗读播放/停止热键，默认 Ctrl+4
+     **/
+    private String ttsKey;
+
+    /**
+     * 朗读语音显示名，空串表示系统默认
+     **/
+    private String ttsVoice;
+
+    /**
+     * 朗读语速倍率（字符串形式，如 "1.0"）
+     **/
+    private String ttsRate;
+
+    /**
      * 全部书本：路径 -> 各自阅读进度（行号），顺序即设置页列表顺序。
      * 支持选择多本书并在阅读界面切换，每本书独立保存进度。
      **/
@@ -76,6 +91,9 @@ public class PersistentState implements PersistentStateComponent<Element> {
         element.setAttribute("lineCount",this.getLineCount());
         element.setAttribute("lineSpace",this.getLineSpace());
         element.setAttribute("bossKey",this.getBossKey());
+        element.setAttribute("ttsKey", this.getTtsKey());
+        element.setAttribute("ttsVoice", this.getTtsVoice());
+        element.setAttribute("ttsRate", this.getTtsRate());
         for (Map.Entry<String, String> entry : bookMap.entrySet()) {
             Element book = new Element("book");
             book.setAttribute("path", entry.getKey());
@@ -99,6 +117,9 @@ public class PersistentState implements PersistentStateComponent<Element> {
         this.setLineCount(state.getAttributeValue("lineCount"));
         this.setLineSpace(state.getAttributeValue("lineSpace"));
         this.setBossKey(state.getAttributeValue("bossKey"));
+        this.setTtsKey(state.getAttributeValue("ttsKey"));
+        this.setTtsVoice(state.getAttributeValue("ttsVoice"));
+        this.setTtsRate(state.getAttributeValue("ttsRate"));
         for (Element book : state.getChildren("book")) {
             String path = book.getAttributeValue("path");
             if (path == null || path.isEmpty()) {
@@ -251,5 +272,29 @@ public class PersistentState implements PersistentStateComponent<Element> {
 
     public void setBossKey(String bossKey) {
         this.bossKey = bossKey;
+    }
+
+    public String getTtsKey() {
+        return (ttsKey == null || ttsKey.isEmpty()) ? "Ctrl+4" : this.ttsKey;
+    }
+
+    public void setTtsKey(String ttsKey) {
+        this.ttsKey = ttsKey;
+    }
+
+    public String getTtsVoice() {
+        return (ttsVoice == null) ? "" : this.ttsVoice;
+    }
+
+    public void setTtsVoice(String ttsVoice) {
+        this.ttsVoice = ttsVoice;
+    }
+
+    public String getTtsRate() {
+        return (ttsRate == null || ttsRate.isEmpty()) ? "1.0" : this.ttsRate;
+    }
+
+    public void setTtsRate(String ttsRate) {
+        this.ttsRate = ttsRate;
     }
 }

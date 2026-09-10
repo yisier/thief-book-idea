@@ -33,6 +33,15 @@ IntelliJ IDEA 插件项目（thief-book-idea，IDE 内"摸鱼"小说阅读器）
 - 翻页靠 `seekDictionary`（每 `cacheInterval=200` 行缓存一个文件指针）加速跳页；改动分页/跳页逻辑时注意维护该缓存。
 - **读取走批量字节块**：`readLines()`/`appendLine()` 按 8KB 块读并切行（处理跨块残行、`\r\n`、末尾无换行行），`countLine()` 同样按字节块扫描换行符计数。新代码不要用 `RandomAccessFile.readLine()` 逐行读（慢且带 ISO-8859-1 往返）。
 
+## 离线朗读（TTS，`src/main/java/com/thief/idea/tts/`）
+- 目标：离线 TTS 逐页朗读小说，一页读完自动翻下一页。入口在 `MainUi` 的 `initTtsPanel()`（单个 Play/Stop 切换按钮 + 语音/语速下拉），朗读开关与页推进分别走 `startTts()`/`ttsNextPage()`，热键 `Ctrl+4`（设置页可改，`PersistentState.ttsKey`）。
+- **平台实现**：Windows 走 SAPI 的 `SpVoice` COM（`SapiVoice` + `WindowsSapiEngine`）；macOS 走 `/usr/bin/say`、Linux 走 `espeak-ng`（`CommandTtsEngine` 子类）。工厂/平台探测在 `TtsEngines`。
+- **不要给 JNA 加依赖**：`com.sun.jna` 与 `com.sun.jna.platform.win32.COM.*`（`COMLateBindingObject` 等）随 IntelliJ Platform 的 `util-8.jar` 提供，`build.gradle` 无需声明，打出的 zip 也不应包含 jna。参考 `build.gradle` 注释。
+- **COM 线程约束**：SAPI 是 STA，`SpVoice` 必须在同一线程创建/调用。`WindowsSapiEngine` 在 `TtsService` 的朗读线程上构造（构造时 `CoInitializeEx`），`pause()/resume()/stop()` 由其它线程只置 volatile 标志，实际 `Pause()/Resume()`/purge 在 `speak()` 轮询循环内执行。
+- **完成判定**：`Speak` 用 `SPF_ASYNC`，再轮询 `Status.RunningState`（`SAPE` 枚举：0 等待/1 读完/2 朗读中）+ `WaitUntilDone`。`SapiVoice.runningState()` 每轮 fresh 取 `Status` 并用 `VariantClear` 释放，**不要**再对临时包装对象调用 `release()`（`COMBindingBaseObject(IDispatch)` 不 AddRef，会重复释放导致崩溃）。
+- **语音切换**：SAPI 的 `Voice` 属性只支持 `PROPERTYPUTREF`，JNA 的 `setProperty` 用的是 `PROPERTYPUT` 会报成员不存在；`SapiVoice.putRefProperty()` 手工构造 `DISPPARAMS` 调用 `DISPATCH_PROPERTYPUTREF` 解决。
+- 朗读与手动翻页共用 `MainUi` 的 `seek/currentPage/readBook()`，手动翻页/跳页/刷新/切书/老板键都会先 `stopTts()`；`readBook()`/`countSeek()` 已加 `synchronized` 防并发错乱。
+
 ## 其他约定
 - `TestUi.java` 的 `isApplicable()` 恒返回 `false`，是禁用/实验代码，不要当作活跃入口。
 - 代码注释与 UI 文案为中文，新增内容请保持一致。
