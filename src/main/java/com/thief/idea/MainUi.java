@@ -6,6 +6,7 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
+import com.intellij.openapi.wm.WindowManager;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.util.ui.JBUI;
@@ -22,6 +23,7 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
+import java.awt.event.AWTEventListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -67,6 +69,21 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             return null;
         }
         return mainUi;
+    }
+
+    /**
+     * 判断当前获得焦点的窗口是否隶属于指定项目。
+     * 设置对话框等子窗口会沿 owner 链回溯到项目主窗口。
+     **/
+    private static boolean isProjectWindowFocused(Project project) {
+        Component projectFrame = WindowManager.getInstance().getFrame(project);
+        Window activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+        for (Window window = activeWindow; window != null; window = window.getOwner()) {
+            if (window == projectFrame) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private PersistentState persistentState = PersistentState.getInstance();
@@ -334,13 +351,23 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      **/
     private static final String[] TTS_RATES = {"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"};
 
+    /**
+     * ToolWindowFactory实例可能被多个项目复用，为每个项目创建独立的MainUi实例保存状态，避免项目间状态互相覆盖。
+     **/
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
+        new MainUi().createToolWindowContentForProject(project, toolWindow);
+    }
+
+    private void createToolWindowContentForProject(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         try {
             instances.put(project, this);
             // 老板键全局监听：任何窗口（包括设置页）获得焦点时都生效
-            Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
-                if (event.getID() != KeyEvent.KEY_PRESSED || HotkeyUtil.editingHotkey) {
+            AWTEventListener bossKeyListener = event -> {
+                if (project.isDisposed()
+                        || event.getID() != KeyEvent.KEY_PRESSED
+                        || HotkeyUtil.editingHotkey
+                        || !isProjectWindowFocused(project)) {
                     return;
                 }
                 KeyEvent keyEvent = (KeyEvent) event;
@@ -351,10 +378,16 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                         && (keyEvent.getModifiersEx() & mask) == (bossKeyStroke.getModifiers() & mask)) {
                     toggleBoss();
                 }
-            }, AWTEvent.KEY_EVENT_MASK);
+            };
+            Toolkit.getDefaultToolkit().addAWTEventListener(bossKeyListener, AWTEvent.KEY_EVENT_MASK);
             JPanel panel = initPanel();
             ContentFactory contentFactory = ContentFactory.getInstance();
             Content content = contentFactory.createContent(panel, "Thief-Book", false);
+            // 项目销毁时注销全局监听
+            content.setDisposer(() -> {
+                Toolkit.getDefaultToolkit().removeAWTEventListener(bossKeyListener);
+                instances.remove(project, this);
+            });
             toolWindow.getContentManager().addContent(content);
             this.toolWindow = toolWindow;
             this.content = content;
