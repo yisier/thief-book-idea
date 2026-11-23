@@ -173,6 +173,15 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     private JComboBox<String> bookSelector;
 
     /**
+     * 是否正在重建书本下拉框。
+     * removeAllItems()/addItem() 会改变选中项并触发下拉框的 action 事件，
+     * 监听器会误判为用户切书而再次调用 refresh()，导致"重建下拉框 → 切书 → refresh"相互递归：
+     * 书库有多本书且当前书不是列表第一本时，refresh() 会无限循环刷新、busy 长期占用，
+     * 表现就是翻页/老板键全部失效。重建期间用该标记屏蔽监听器。
+     **/
+    private boolean updatingBookSelector = false;
+
+    /**
      * 解析阅读区字体：未配置/选择"系统默认"/系统不存在的字体时，跟随 IDE 默认字体
      **/
     private Font resolveFont() {
@@ -424,6 +433,10 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             }
         });
         combo.addActionListener(e -> {
+            // 重建下拉框时（removeAllItems/addItem 引起的选中项变化）不是用户在切书，直接忽略
+            if (updatingBookSelector) {
+                return;
+            }
             Object selected = combo.getSelectedItem();
             if (selected != null && !Objects.equals(selected, bookFile)) {
                 stopTts();
@@ -435,19 +448,30 @@ public class MainUi implements ToolWindowFactory, DumbAware {
     }
 
     /**
-     * 同步书本下拉框与设置页的书本列表，仅多本书时显示
+     * 同步书本下拉框与设置页的书本列表，仅多本书时显示。
+     * 重建期间屏蔽下拉框监听器，避免误触发 refresh()（见 updatingBookSelector 注释）
      **/
     private void updateBookSelector() {
         if (bookSelector == null) {
             return;
         }
         String selected = bookFile;
-        bookSelector.removeAllItems();
-        for (String path : persistentState.getBookPathList()) {
-            bookSelector.addItem(path);
+        updatingBookSelector = true;
+        try {
+            bookSelector.removeAllItems();
+            for (String path : persistentState.getBookPathList()) {
+                bookSelector.addItem(path);
+            }
+            if (selected == null || selected.isEmpty() || !containsItem(bookSelector, selected)) {
+                // 无活动书（或活动书已不在列表中）时清空选中，避免默认选中第一本造成显示与实际不一致
+                bookSelector.setSelectedItem(null);
+            } else {
+                bookSelector.setSelectedItem(selected);
+            }
+            bookSelector.setVisible(persistentState.getBookPathList().size() > 1);
+        } finally {
+            updatingBookSelector = false;
         }
-        bookSelector.setSelectedItem(selected);
-        bookSelector.setVisible(persistentState.getBookPathList().size() > 1);
     }
 
     /**
@@ -468,6 +492,11 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      * 同时记录原始文本（含占位），供老板键隐藏/恢复时还原页面。
      **/
     private void setPageText(String content) {
+        // 老板键隐藏期间页面不覆盖"终端"伪装文案，否则后台刷新一完成就会把小说正文刷回来，
+        // 看起来就像老板键没生效（按钮仍然是隐藏状态，界面却又是小说）
+        if (hide) {
+            return;
+        }
         lastContent = content;
         Font font = resolveFont();
         textPane.setFont(font);
@@ -634,7 +663,9 @@ public class MainUi implements ToolWindowFactory, DumbAware {
         int bestLine = -1;
         for (int i = 0; i < epubToc.size(); i++) {
             int l = epubToc.get(i).line;
-            if (l >= 0 && l <= anchor && l >= bestLine) {
+            // 用严格大于：多个目录项落在同一行（如目录不带片段、未能逐条定位）时选第一条，
+            // 否则会一直选中该行最后一个条目，看起来就是目录“总是跳到后面/最后一条”
+            if (l >= 0 && l <= anchor && l > bestLine) {
                 best = i;
                 bestLine = l;
             }
@@ -1192,6 +1223,8 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             if (ttsPanel != null) {
                 ttsPanel.setVisible(true);
             }
+            // 先复位隐藏标记，setPageText 在隐藏状态下会跳过渲染
+            hide = false;
             setPageText(temp);
             if (content != null) {
                 content.setDisplayName("Thief-Book");
@@ -1199,7 +1232,6 @@ public class MainUi implements ToolWindowFactory, DumbAware {
             if (toolWindow != null) {
                 toolWindow.setIcon(originIcon);
             }
-            hide = false;
         } else {
             stopTts();
             for (JButton b : buttons) {
@@ -1533,17 +1565,25 @@ public class MainUi implements ToolWindowFactory, DumbAware {
                 e.printStackTrace();
                 final String msg = e.getMessage() != null ? e.getMessage() : e.toString();
                 ApplicationManager.getApplication().invokeLater(() -> {
-                    setPageText(msg);
-                    busy.set(false);
-                    retryPendingRefresh();
+                    try {
+                        setPageText(msg);
+                    } finally {
+                        busy.set(false);
+                        retryPendingRefresh();
+                    }
                 });
                 return;
             }
             final String result = content;
             ApplicationManager.getApplication().invokeLater(() -> {
-                onEdt.accept(result);
-                busy.set(false);
-                retryPendingRefresh();
+                // busy 必须在 finally 里释放：回调里任何异常都不能让 busy 停在 true，
+                // 否则之后所有翻页/跳页/刷新都会被 runIoAsync 静默丢弃（表现为翻页没反应）
+                try {
+                    onEdt.accept(result);
+                } finally {
+                    busy.set(false);
+                    retryPendingRefresh();
+                }
             });
         });
         return true;

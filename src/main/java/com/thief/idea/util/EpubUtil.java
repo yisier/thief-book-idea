@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -174,14 +175,13 @@ public class EpubUtil {
         List<TocEntry> result = new ArrayList<>();
         List<TOCReference> refs = book.getTableOfContents().getTocReferences();
         if (refs != null) {
-            collectToc(refs, 0, chapterStartLine, chapterLines, chapterHtml, firstKey, result);
+            TocLocator locator = new TocLocator(chapterStartLine, chapterLines, chapterHtml, firstKey);
+            collectToc(refs, 0, locator, result);
         }
         return result;
     }
 
-    private static void collectToc(List<TOCReference> refs, int depth, Map<String, Integer> chapterStartLine,
-                                   Map<String, List<ExtractedLine>> chapterLines,
-                                   Map<String, String> chapterHtml, String firstKey, List<TocEntry> out) {
+    private static void collectToc(List<TOCReference> refs, int depth, TocLocator locator, List<TocEntry> out) {
         for (TOCReference ref : refs) {
             String href = ref.getCompleteHref();
             if (href == null && ref.getResource() != null) {
@@ -191,52 +191,232 @@ public class EpubUtil {
             if (title == null) {
                 title = "";
             }
-            int line = resolveTocLine(href, chapterStartLine, chapterLines, chapterHtml, firstKey);
+            int line = locator.resolve(href, title);
             if (line >= 0) {
                 out.add(new TocEntry(title.trim(), href != null ? href : "", depth, line));
             }
             if (ref.getChildren() != null && !ref.getChildren().isEmpty()) {
-                collectToc(ref.getChildren(), depth + 1, chapterStartLine, chapterLines, chapterHtml, firstKey, out);
+                collectToc(ref.getChildren(), depth + 1, locator, out);
             }
         }
     }
 
     /**
-     * 把目录项 href（相对 OPF 目录，可能带 #片段）解析成正文行号
+     * 目录项 → 正文行号定位器。
+     * 优先按 href 的 #片段 定位；不少电子书（如各章一个 html、目录只写文件名的 NCX）目录项
+     * 完全不带片段，甚至 NCX 里的章节文件与目录项范围对不上（把前半册的目录挂到后半册文件上），
+     * 只按“文件对应的章首行”解析会让整组目录项挤在同一行。
+     * 这类情况改为在"全书顺序文本"里按目录标题逐条向后查找标题行
+     * （"Lesson 57 …""第57课 …"或标题本身）：目录顺序即阅读顺序，向后查找既能保证
+     * 同编号在多个分册重复出现时各归各位，也能让高亮与点击都落到真实课/章位置。
      **/
-    private static int resolveTocLine(String href, Map<String, Integer> chapterStartLine,
-                                      Map<String, List<ExtractedLine>> chapterLines,
-                                      Map<String, String> chapterHtml, String firstKey) {
-        if (href == null || href.isEmpty()) {
-            return -1;
+    private static final class TocLocator {
+        private final Map<String, Integer> chapterStartLine;
+        private final Map<String, List<ExtractedLine>> chapterLines;
+        private final Map<String, String> chapterHtml;
+        private final String firstKey;
+
+        /**
+         * 全书所有行（按绝对行号索引）的归一化文本，仅在需要按标题查找时构建
+         **/
+        private String[] globalLines;
+
+        /**
+         * 全书下一次标题查找的起始行号：保证优先往后找，同一编号在多个分册重复出现时不会匹配错
+         **/
+        private int globalCursor = 0;
+
+        TocLocator(Map<String, Integer> chapterStartLine, Map<String, List<ExtractedLine>> chapterLines,
+                   Map<String, String> chapterHtml, String firstKey) {
+            this.chapterStartLine = chapterStartLine;
+            this.chapterLines = chapterLines;
+            this.chapterHtml = chapterHtml;
+            this.firstKey = firstKey;
         }
-        String path = href;
-        String fragment = null;
-        int hash = href.indexOf('#');
-        if (hash >= 0) {
-            path = href.substring(0, hash);
-            fragment = href.substring(hash + 1);
+
+        int resolve(String href, String title) {
+            if (href == null || href.isEmpty()) {
+                return -1;
+            }
+            String path = href;
+            String fragment = null;
+            int hash = href.indexOf('#');
+            if (hash >= 0) {
+                path = href.substring(0, hash);
+                fragment = href.substring(hash + 1);
+            }
+            String key = path.isEmpty() ? firstKey : normalize(path);
+            if (key == null || !chapterStartLine.containsKey(key)) {
+                return -1;
+            }
+            int start = chapterStartLine.get(key);
+            List<ExtractedLine> lines = chapterLines.get(key);
+            if (lines == null || lines.isEmpty()) {
+                return start;
+            }
+            if (fragment != null && !fragment.isEmpty()) {
+                // 片段锚点：用 jsoup 定位 id/name 元素在源码中的字符位置，再映射到最近的文本行
+                int anchor = findAnchorPos(chapterHtml.get(key), fragment);
+                if (anchor >= 0) {
+                    for (int i = 0; i < lines.size(); i++) {
+                        if (lines.get(i).offset >= anchor) {
+                            int line = start + i;
+                            advanceCursor(line);
+                            return line;
+                        }
+                    }
+                    int line = start + lines.size() - 1;
+                    advanceCursor(line);
+                    return line;
+                }
+            }
+            // 无片段（或片段定位失败）：按标题在全书内向后查找标题行
+            String t = normalizeTitle(title);
+            if (!t.isEmpty()) {
+                String[] global = globalLines();
+                int index = findTitleLine(t, global, globalCursor);
+                if (index < 0) {
+                    // 书名/课名在正文里被写错（如“Lesson 56”印成“Lesson 47”）时全书往后找不到，
+                    // 再在该目录项指向的章节内找一次；仍找不到就退回章首，绝不跨书往回跳
+                    int local = findTitleLine(t, normalizedChapter(lines), 0);
+                    if (local >= 0) {
+                        int line = start + local;
+                        advanceCursor(line);
+                        return line;
+                    }
+                } else {
+                    globalCursor = index + 1;
+                    return index;
+                }
+            }
+            // 全书都找不到同名标题时：退到“上一条目录项之后”的位置，通常就是该标题本应在的地方
+            // （正文标题写错/缺失时尤其明显）；上一条目不在本章时退到本章首行
+            String[] global = globalLines();
+            int fallback = Math.min(Math.max(start, globalCursor), global.length - 1);
+            advanceCursor(fallback);
+            return Math.max(fallback, 0);
         }
-        String key = path.isEmpty() ? firstKey : normalize(path);
-        if (key == null || !chapterStartLine.containsKey(key)) {
-            return -1;
+
+        private String[] normalizedChapter(List<ExtractedLine> lines) {
+            String[] normalized = new String[lines.size()];
+            for (int i = 0; i < lines.size(); i++) {
+                normalized[i] = normalizeTitle(lines.get(i).text);
+            }
+            return normalized;
         }
-        int line = chapterStartLine.get(key);
-        if (fragment == null || fragment.isEmpty()) {
-            return line;
-        }
-        // 片段锚点：用 jsoup 定位 id/name 元素在源码中的字符位置，再映射到最近的文本行
-        int anchor = findAnchorPos(chapterHtml.get(key), fragment);
-        if (anchor < 0) {
-            return line;
-        }
-        List<ExtractedLine> lines = chapterLines.get(key);
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).offset >= anchor) {
-                return line + i;
+
+        private void advanceCursor(int line) {
+            if (line + 1 > globalCursor) {
+                globalCursor = line + 1;
             }
         }
-        return line + lines.size() - 1;
+
+        /**
+         * 按绝对行号构建全书归一化文本：各章起始行号是连续的，直接按 start 拷进同一数组即可
+         **/
+        private String[] globalLines() {
+            if (globalLines == null) {
+                int total = 0;
+                for (Map.Entry<String, Integer> entry : chapterStartLine.entrySet()) {
+                    List<ExtractedLine> lines = chapterLines.get(entry.getKey());
+                    if (lines != null) {
+                        total = Math.max(total, entry.getValue() + lines.size());
+                    }
+                }
+                String[] merged = new String[total];
+                for (Map.Entry<String, Integer> entry : chapterStartLine.entrySet()) {
+                    List<ExtractedLine> lines = chapterLines.get(entry.getKey());
+                    if (lines == null) {
+                        continue;
+                    }
+                    int start = entry.getValue();
+                    for (int i = 0; i < lines.size(); i++) {
+                        merged[start + i] = normalizeTitle(lines.get(i).text);
+                    }
+                }
+                globalLines = merged;
+            }
+            return globalLines;
+        }
+    }
+
+    /**
+     * 标题行常见的引导词：目录标题通常出现在 "Lesson 57 xxx"、"Chapter 3 xxx"、"第57课 xxx" 这类行里
+     **/
+    private static final String[] HEADING_WORDS = {
+            "lesson", "chapter", "unit", "part", "section", "article", "book", "第"
+    };
+
+    /**
+     * 在归一化后的文本行中从 from 起向后查找某一目录标题对应的标题行，返回行下标，找不到返回 -1
+     **/
+    private static int findTitleLine(String title, String[] lines, int from) {
+        if (title == null || title.isEmpty()) {
+            return -1;
+        }
+        for (int i = Math.max(0, from); i < lines.length; i++) {
+            String line = lines[i];
+            if (line.isEmpty()) {
+                continue;
+            }
+            if (line.equals(title)) {
+                return i;
+            }
+            for (String word : HEADING_WORDS) {
+                if (line.startsWith(word) && startsWithToken(line.substring(word.length()).trim(), title)) {
+                    return i;
+                }
+            }
+            // "57. xxx" / "57、xxx" 这类编号标题
+            if (startsWithToken(line, title) && followedBySeparator(line, title.length())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 比较用的标题归一化：去不可见空白、压缩空白、小写
+     **/
+    private static String normalizeTitle(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replace('\u00A0', ' ').replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * text 是否以 token 开头且 token 后是边界（空白/标点/行尾）。
+     * 纯数字标题后允许紧跟“课/章/节”等中文单位词，兼容“第57课”这类标题。
+     **/
+    private static boolean startsWithToken(String text, String token) {
+        if (!text.startsWith(token)) {
+            return false;
+        }
+        if (text.length() == token.length()) {
+            return true;
+        }
+        char next = text.charAt(token.length());
+        if (!Character.isLetterOrDigit(next)) {
+            return true;
+        }
+        return isCjkUnit(next) && endsWithDigit(token);
+    }
+
+    private static boolean isCjkUnit(char c) {
+        return "课章节回篇讲部卷".indexOf(c) >= 0;
+    }
+
+    private static boolean endsWithDigit(String token) {
+        return !token.isEmpty() && Character.isDigit(token.charAt(token.length() - 1));
+    }
+
+    private static boolean followedBySeparator(String text, int titleLen) {
+        if (text.length() <= titleLen) {
+            return false;
+        }
+        char c = text.charAt(titleLen);
+        return c == '.' || c == '．' || c == '、' || c == ')' || c == '）';
     }
 
     private static int findAnchorPos(String html, String fragment) {

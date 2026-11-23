@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.thief.idea</id>
   <name>thief-book-idea</name>
-  <version>0.1.6</version>
+  <version>0.1.7</version>
   <vendor email="1340976576@qq.com" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
 
   <description>
@@ -40,6 +40,13 @@
 
   <change-notes>
     <![CDATA[
+      <h3>0.1.7</h3>
+      <ul>
+        <li>修复书库有多本书、且当前书不是列表第一本时，应用设置后翻页/老板键全部失效的问题</li>
+        <li>修复老板键隐藏期间后台刷新会把小说正文刷回阅读区、看起来像老板键没生效的问题</li>
+        <li>修复 EPUB 目录高亮总是跳到末尾：目录项不带片段时按标题在全书内顺序定位，目录与章节文件对应错误也能逐条命中</li>
+        <li>翻页/刷新后台任务异常时不再让 busy 卡住，避免后续翻页、跳页无响应</li>
+      </ul>
       <h3>0.1.6</h3>
       <ul>
         <li>新增离线朗读（TTS）：一键 Play/Stop，一页读完自动翻下一页续读</li>
