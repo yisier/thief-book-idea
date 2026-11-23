@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.thief.idea</id>
   <name>thief-book-idea</name>
-  <version>0.1.7</version>
+  <version>0.1.8</version>
   <vendor email="1340976576@qq.com" url="https://github.com/yisier/thief-book-idea">毅斯</vendor>
 
   <description>
@@ -40,6 +40,12 @@
 
   <change-notes>
     <![CDATA[
+      <h3>0.1.8</h3>
+      <ul>
+        <li>修复同时打开多个项目时，各项目阅读器状态互相覆盖、旧项目老板键失灵的问题（每个项目使用独立实例，感谢 @lfceky 的 PR #46）</li>
+        <li>老板键仅在当前聚焦的项目窗口生效，项目关闭时自动注销全局键盘监听</li>
+        <li>取不到项目主窗口时不做焦点过滤，避免老板键失效</li>
+      </ul>
       <h3>0.1.7</h3>
       <ul>
         <li>修复书库有多本书、且当前书不是列表第一本时，应用设置后翻页/老板键全部失效的问题</li>
