@@ -77,6 +77,11 @@ public class MainUi implements ToolWindowFactory, DumbAware {
      **/
     private static boolean isProjectWindowFocused(Project project) {
         Component projectFrame = WindowManager.getInstance().getFrame(project);
+        if (projectFrame == null) {
+            // 项目窗口尚未创建（如刚打开、LightEdit 等）时取不到主窗口，
+            // 退回旧行为：不按焦点过滤，避免老板键直接失效
+            return true;
+        }
         Window activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
         for (Window window = activeWindow; window != null; window = window.getOwner()) {
             if (window == projectFrame) {
